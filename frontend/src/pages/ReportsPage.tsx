@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   api,
   type HealthPlan,
@@ -8,6 +8,30 @@ import {
 } from "../api";
 import { Button, Card, Input, Label, Select } from "../components/Card";
 import { MONTHS, WEEKDAYS, currentYearMonth, formatBRL } from "../utils";
+
+function buildInvoiceText(report: PatientMonthReport): string {
+  const billedItems = report.items.filter((i) => i.sessions_billed > 0);
+  const lines: string[] = [];
+  lines.push(
+    `Tratamento realizado pelo(a) paciente ${report.patient_name}` +
+      (report.patient_cpf ? `, CPF ${report.patient_cpf}` : ""),
+  );
+  lines.push(`Beneficiário: ${report.patient_beneficiary || "—"}`);
+  lines.push(`Plano de saúde: ${report.health_plan_name}`);
+  lines.push(`Competência: ${MONTHS[report.month - 1]}/${report.year}`);
+  lines.push("");
+  lines.push("Referente às sessões de:");
+  for (const i of billedItems) {
+    lines.push(
+      `- ${i.specialty_name}: ${i.sessions_billed} sessão(ões) × ${formatBRL(
+        i.unit_value,
+      )} = ${formatBRL(i.total)}`,
+    );
+  }
+  lines.push("");
+  lines.push(`Total: ${formatBRL(report.total)}`);
+  return lines.join("\n");
+}
 
 type Mode = "patient" | "plan";
 
@@ -154,10 +178,25 @@ export default function ReportsPage() {
 }
 
 function PatientReportCard({ report }: { report: PatientMonthReport }) {
+  const invoiceText = useMemo(() => buildInvoiceText(report), [report]);
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(invoiceText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard indisponível — ignora; o usuário pode selecionar o texto
+    }
+  }
+
   return (
     <Card
       title={`${report.patient_name} · ${MONTHS[report.month - 1]}/${report.year}`}
-      subtitle={`Plano de saúde: ${report.health_plan_name}`}
+      subtitle={`Plano de saúde: ${report.health_plan_name}${
+        report.patient_cpf ? ` · CPF ${report.patient_cpf}` : ""
+      }${report.patient_beneficiary ? ` · Beneficiário: ${report.patient_beneficiary}` : ""}`}
     >
       <table className="min-w-full text-sm">
         <thead className="bg-slate-50">
@@ -221,6 +260,20 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
           </ul>
         </div>
       )}
+
+      <div className="mt-6 border-t border-slate-200 pt-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-medium text-slate-700">
+            Texto para nota fiscal
+          </div>
+          <Button variant="secondary" onClick={copy}>
+            {copied ? "Copiado!" : "Copiar texto"}
+          </Button>
+        </div>
+        <pre className="whitespace-pre-wrap text-sm bg-slate-50 border border-slate-200 rounded-md p-3 font-sans">
+{invoiceText}
+        </pre>
+      </div>
     </Card>
   );
 }

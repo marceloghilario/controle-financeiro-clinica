@@ -9,6 +9,25 @@ from sqlalchemy.orm import Session, selectinload
 from . import billing, models, schemas
 from .database import Base, engine, get_db
 
+
+def _migrate_sqlite() -> None:
+    """Aplica pequenas migrações idempotentes em bancos SQLite existentes
+    (adiciona colunas novas quando o modelo evolui).
+    """
+    if not engine.url.drivername.startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        cols = {
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(patients)").fetchall()
+        }
+        if "cpf" not in cols:
+            conn.exec_driver_sql("ALTER TABLE patients ADD COLUMN cpf VARCHAR(20)")
+        if "beneficiary" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE patients ADD COLUMN beneficiary VARCHAR(200)"
+            )
+
 app = FastAPI(title="Controle Financeiro Clínica", version="0.1.0")
 
 app.add_middleware(
@@ -23,6 +42,7 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    _migrate_sqlite()
 
 
 @app.get("/healthz")
@@ -172,6 +192,8 @@ def _patient_read(p: models.Patient) -> schemas.PatientRead:
     return schemas.PatientRead(
         id=p.id,
         name=p.name,
+        cpf=p.cpf,
+        beneficiary=p.beneficiary,
         health_plan_id=p.health_plan_id,
         active=p.active,
         health_plan_name=p.health_plan.name if p.health_plan else None,
@@ -196,7 +218,13 @@ def create_patient(
 ) -> schemas.PatientRead:
     if not db.get(models.HealthPlan, data.health_plan_id):
         raise HTTPException(status_code=404, detail="Plano não encontrado.")
-    obj = models.Patient(name=data.name.strip(), health_plan_id=data.health_plan_id, active=data.active)
+    obj = models.Patient(
+        name=data.name.strip(),
+        cpf=(data.cpf.strip() if data.cpf else None) or None,
+        beneficiary=(data.beneficiary.strip() if data.beneficiary else None) or None,
+        health_plan_id=data.health_plan_id,
+        active=data.active,
+    )
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -214,6 +242,10 @@ def update_patient(
         raise HTTPException(status_code=404, detail="Paciente não encontrado.")
     if data.name is not None:
         obj.name = data.name.strip()
+    if data.cpf is not None:
+        obj.cpf = data.cpf.strip() or None
+    if data.beneficiary is not None:
+        obj.beneficiary = data.beneficiary.strip() or None
     if data.health_plan_id is not None:
         if not db.get(models.HealthPlan, data.health_plan_id):
             raise HTTPException(status_code=404, detail="Plano não encontrado.")

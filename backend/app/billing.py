@@ -113,6 +113,8 @@ def compute_patient_month(
     return schemas.PatientMonthReport(
         patient_id=patient.id,
         patient_name=patient.name,
+        patient_cpf=patient.cpf,
+        patient_beneficiary=patient.beneficiary,
         health_plan_id=patient.health_plan_id,
         health_plan_name=patient.health_plan.name,
         year=year,

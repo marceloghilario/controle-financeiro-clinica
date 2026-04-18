@@ -52,6 +52,8 @@ class Patient(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    cpf: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    beneficiary: Mapped[str | None] = mapped_column(String(200), nullable=True)
     health_plan_id: Mapped[int] = mapped_column(ForeignKey("health_plans.id"), nullable=False)
     active: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 

@@ -47,6 +47,8 @@ export type SpecialtyPrice = {
 export type Patient = {
   id: number;
   name: string;
+  cpf?: string | null;
+  beneficiary?: string | null;
   health_plan_id: number;
   health_plan_name?: string | null;
   active: number;
@@ -84,6 +86,8 @@ export type AbsenceDetail = {
 export type PatientMonthReport = {
   patient_id: number;
   patient_name: string;
+  patient_cpf?: string | null;
+  patient_beneficiary?: string | null;
   health_plan_id: number;
   health_plan_name: string;
   year: number;

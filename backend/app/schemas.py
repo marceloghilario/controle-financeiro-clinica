@@ -51,6 +51,8 @@ class SpecialtyPriceDetailed(SpecialtyPriceRead):
 
 class PatientBase(BaseModel):
     name: str
+    cpf: str | None = None
+    beneficiary: str | None = None
     health_plan_id: int
     active: int = 1
 
@@ -61,6 +63,8 @@ class PatientCreate(PatientBase):
 
 class PatientUpdate(BaseModel):
     name: str | None = None
+    cpf: str | None = None
+    beneficiary: str | None = None
     health_plan_id: int | None = None
     active: int | None = None
 
@@ -127,6 +131,8 @@ class AbsenceDetail(BaseModel):
 class PatientMonthReport(BaseModel):
     patient_id: int
     patient_name: str
+    patient_cpf: str | None = None
+    patient_beneficiary: str | None = None
     health_plan_id: int
     health_plan_name: str
     year: int
