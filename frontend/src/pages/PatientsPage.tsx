@@ -97,11 +97,11 @@ export default function PatientsPage() {
           />
         </div>
         <div className="flex flex-col gap-1">
-          <Label>Beneficiário</Label>
+          <Label>Código do beneficiário</Label>
           <Input
             value={beneficiary}
             onChange={(e) => setBeneficiary(e.target.value)}
-            placeholder="Nome do titular / beneficiário do plano"
+            placeholder="Identificação do paciente no plano de saúde"
           />
         </div>
         <div className="md:col-span-2 flex flex-col gap-1">
@@ -136,7 +136,7 @@ export default function PatientsPage() {
             <tr>
               <th className="text-left px-3 py-2">Paciente</th>
               <th className="text-left px-3 py-2">CPF</th>
-              <th className="text-left px-3 py-2">Beneficiário</th>
+              <th className="text-left px-3 py-2">Cód. beneficiário</th>
               <th className="text-left px-3 py-2">Plano</th>
               <th className="text-right px-3 py-2 w-40" />
             </tr>

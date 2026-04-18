@@ -16,7 +16,7 @@ function buildInvoiceText(report: PatientMonthReport): string {
     `Tratamento realizado pelo(a) paciente ${report.patient_name}` +
       (report.patient_cpf ? `, CPF ${report.patient_cpf}` : ""),
   );
-  lines.push(`Beneficiário: ${report.patient_beneficiary || "—"}`);
+  lines.push(`Código do beneficiário: ${report.patient_beneficiary || "—"}`);
   lines.push(`Plano de saúde: ${report.health_plan_name}`);
   lines.push(`Competência: ${MONTHS[report.month - 1]}/${report.year}`);
   lines.push("");
@@ -196,7 +196,11 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
       title={`${report.patient_name} · ${MONTHS[report.month - 1]}/${report.year}`}
       subtitle={`Plano de saúde: ${report.health_plan_name}${
         report.patient_cpf ? ` · CPF ${report.patient_cpf}` : ""
-      }${report.patient_beneficiary ? ` · Beneficiário: ${report.patient_beneficiary}` : ""}`}
+      }${
+        report.patient_beneficiary
+          ? ` · Cód. beneficiário: ${report.patient_beneficiary}`
+          : ""
+      }`}
     >
       <table className="min-w-full text-sm">
         <thead className="bg-slate-50">
