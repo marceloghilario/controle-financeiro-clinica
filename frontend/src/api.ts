@@ -59,13 +59,13 @@ export type WeeklyPlanEntry = {
   specialty_name?: string | null;
   sessions: number;
 };
-export type MonthlyAbsence = {
+export type AbsenceDay = {
   id: number;
   patient_id: number;
-  specialty_id: number;
-  year: number;
-  month: number;
-  count: number;
+  date: string; // YYYY-MM-DD
+  note: string | null;
+  day_of_week: number;
+  impacted_specialties: string[];
 };
 export type SpecialtyReportItem = {
   specialty_id: number;
@@ -76,6 +76,11 @@ export type SpecialtyReportItem = {
   unit_value: number;
   total: number;
 };
+export type AbsenceDetail = {
+  date: string;
+  day_of_week: number;
+  impacted_specialties: string[];
+};
 export type PatientMonthReport = {
   patient_id: number;
   patient_name: string;
@@ -85,6 +90,7 @@ export type PatientMonthReport = {
   month: number;
   business_days_by_weekday: Record<string, number>;
   items: SpecialtyReportItem[];
+  absence_days: AbsenceDetail[];
   total: number;
 };
 export type HealthPlanMonthReport = {

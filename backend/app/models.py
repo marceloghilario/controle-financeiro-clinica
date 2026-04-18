@@ -1,4 +1,6 @@
-from sqlalchemy import Float, ForeignKey, Integer, String, UniqueConstraint
+from datetime import date
+
+from sqlalchemy import Date, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -26,9 +28,6 @@ class Specialty(Base):
         back_populates="specialty", cascade="all, delete-orphan"
     )
     weekly_entries: Mapped[list["WeeklyPlanEntry"]] = relationship(
-        back_populates="specialty", cascade="all, delete-orphan"
-    )
-    absences: Mapped[list["MonthlyAbsence"]] = relationship(
         back_populates="specialty", cascade="all, delete-orphan"
     )
 
@@ -60,7 +59,7 @@ class Patient(Base):
     weekly_entries: Mapped[list["WeeklyPlanEntry"]] = relationship(
         back_populates="patient", cascade="all, delete-orphan"
     )
-    absences: Mapped[list["MonthlyAbsence"]] = relationship(
+    absence_days: Mapped[list["AbsenceDay"]] = relationship(
         back_populates="patient", cascade="all, delete-orphan"
     )
 
@@ -86,22 +85,21 @@ class WeeklyPlanEntry(Base):
     specialty: Mapped[Specialty] = relationship(back_populates="weekly_entries")
 
 
-class MonthlyAbsence(Base):
-    """Faltas registradas por paciente+especialidade em um mês específico."""
+class AbsenceDay(Base):
+    """Dia em que o paciente faltou à clínica.
 
-    __tablename__ = "monthly_absences"
+    A partir do plano semanal do paciente, o sistema descobre automaticamente quais
+    especialidades foram impactadas naquele dia da semana e desconta do faturamento.
+    """
+
+    __tablename__ = "absence_days"
     __table_args__ = (
-        UniqueConstraint(
-            "patient_id", "specialty_id", "year", "month", name="uq_monthly_absence"
-        ),
+        UniqueConstraint("patient_id", "date", name="uq_absence_day"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False)
-    specialty_id: Mapped[int] = mapped_column(ForeignKey("specialties.id"), nullable=False)
-    year: Mapped[int] = mapped_column(Integer, nullable=False)
-    month: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..12
-    count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
-    patient: Mapped[Patient] = relationship(back_populates="absences")
-    specialty: Mapped[Specialty] = relationship(back_populates="absences")
+    patient: Mapped[Patient] = relationship(back_populates="absence_days")

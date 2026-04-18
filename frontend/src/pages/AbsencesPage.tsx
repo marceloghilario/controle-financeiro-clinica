@@ -1,18 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   api,
-  type MonthlyAbsence,
+  type AbsenceDay,
   type Patient,
   type WeeklyPlanEntry,
 } from "../api";
 import { Card, Input, Label, Select } from "../components/Card";
-import { MONTHS, currentYearMonth } from "../utils";
+import { MONTHS, WEEKDAYS, currentYearMonth } from "../utils";
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
 
 export default function AbsencesPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientId, setPatientId] = useState<number | "">("");
   const [entries, setEntries] = useState<WeeklyPlanEntry[]>([]);
-  const [absences, setAbsences] = useState<MonthlyAbsence[]>([]);
+  const [absences, setAbsences] = useState<AbsenceDay[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const now = currentYearMonth();
@@ -34,8 +42,8 @@ export default function AbsencesPage() {
     }
     Promise.all([
       api.get<WeeklyPlanEntry[]>(`/api/patients/${patientId}/weekly-plan`),
-      api.get<MonthlyAbsence[]>(
-        `/api/absences?year=${year}&month=${month}&patient_id=${patientId}`,
+      api.get<AbsenceDay[]>(
+        `/api/absence-days?patient_id=${patientId}&year=${year}&month=${month}`,
       ),
     ])
       .then(([e, a]) => {
@@ -45,26 +53,40 @@ export default function AbsencesPage() {
       .catch((err) => setError((err as Error).message));
   }, [patientId, year, month]);
 
-  const specialtiesInPlan = useMemo(() => {
-    const m = new Map<number, string>();
+  // Mapa dia_da_semana -> lista de especialidades do plano
+  const planByWeekday = useMemo(() => {
+    const m: Record<number, string[]> = {};
     for (const e of entries) {
-      if (e.specialty_name) m.set(e.specialty_id, e.specialty_name);
+      if (!m[e.day_of_week]) m[e.day_of_week] = [];
+      if (e.specialty_name) m[e.day_of_week].push(e.specialty_name);
     }
-    return Array.from(m.entries()).map(([id, name]) => ({ id, name }));
+    for (const k of Object.keys(m)) {
+      m[Number(k)] = Array.from(new Set(m[Number(k)])).sort();
+    }
+    return m;
   }, [entries]);
 
-  async function setAbsenceCount(specialtyId: number, count: number) {
+  const absenceByDate = useMemo(() => {
+    const m = new Map<string, AbsenceDay>();
+    for (const a of absences) m.set(a.date, a);
+    return m;
+  }, [absences]);
+
+  async function toggleDate(dateStr: string) {
     if (patientId === "") return;
     try {
-      await api.post<MonthlyAbsence>("/api/absences", {
-        patient_id: Number(patientId),
-        specialty_id: specialtyId,
-        year,
-        month,
-        count,
-      });
-      const fresh = await api.get<MonthlyAbsence[]>(
-        `/api/absences?year=${year}&month=${month}&patient_id=${patientId}`,
+      const existing = absenceByDate.get(dateStr);
+      if (existing) {
+        await api.del(`/api/absence-days/${existing.id}`);
+      } else {
+        await api.post<AbsenceDay>("/api/absence-days", {
+          patient_id: Number(patientId),
+          date: dateStr,
+          note: null,
+        });
+      }
+      const fresh = await api.get<AbsenceDay[]>(
+        `/api/absence-days?patient_id=${patientId}&year=${year}&month=${month}`,
       );
       setAbsences(fresh);
       setError(null);
@@ -73,10 +95,27 @@ export default function AbsencesPage() {
     }
   }
 
+  // Gera lista de dias do mês (seg–sex)
+  const businessDays = useMemo(() => {
+    if (patientId === "") return [];
+    const total = daysInMonth(year, month);
+    const out: { day: number; dow: number; dateStr: string }[] = [];
+    for (let d = 1; d <= total; d++) {
+      const js = new Date(year, month - 1, d);
+      // JS: 0=Dom, 1=Seg...6=Sáb. Convert to 0=Seg..6=Dom
+      const jsDow = js.getDay();
+      const dow = (jsDow + 6) % 7;
+      if (dow < 5) {
+        out.push({ day: d, dow, dateStr: `${year}-${pad2(month)}-${pad2(d)}` });
+      }
+    }
+    return out;
+  }, [patientId, year, month]);
+
   return (
     <Card
-      title="Faltas do mês"
-      subtitle="Registre quantas sessões o paciente faltou no mês (as faltas são descontadas do total a faturar)."
+      title="Faltas por dia"
+      subtitle="Marque os dias em que o paciente faltou. O sistema identifica automaticamente as terapias impactadas com base no plano semanal."
     >
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
         <div className="flex flex-col gap-1 md:col-span-2">
@@ -116,66 +155,64 @@ export default function AbsencesPage() {
       </div>
       {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
 
-      {patientId !== "" && (
+      {patientId === "" ? (
+        <div className="text-sm text-slate-500">
+          Selecione um paciente para marcar faltas.
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="text-sm text-slate-500">
+          Este paciente ainda não tem plano semanal. Cadastre o plano antes de registrar
+          faltas.
+        </div>
+      ) : (
         <>
-          {specialtiesInPlan.length === 0 ? (
-            <div className="text-sm text-slate-500">
-              Este paciente ainda não tem plano semanal. Cadastre o plano antes de registrar
-              faltas.
-            </div>
-          ) : (
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="text-left px-3 py-2">Especialidade</th>
-                  <th className="text-right px-3 py-2 w-40">Faltas no mês</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {specialtiesInPlan.map((s) => {
-                  const current = absences.find((a) => a.specialty_id === s.id)?.count ?? 0;
-                  return (
-                    <tr key={s.id}>
-                      <td className="px-3 py-2">{s.name}</td>
-                      <td className="px-3 py-2 text-right">
-                        <AbsenceInput
-                          value={current}
-                          onChange={(v) => setAbsenceCount(s.id, v)}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {businessDays.map(({ day, dow, dateStr }) => {
+              const planned = planByWeekday[dow] ?? [];
+              const isAbsent = absenceByDate.has(dateStr);
+              const hasPlan = planned.length > 0;
+              return (
+                <button
+                  key={dateStr}
+                  type="button"
+                  onClick={() => toggleDate(dateStr)}
+                  disabled={!hasPlan}
+                  className={`text-left border rounded-lg p-3 transition ${
+                    isAbsent
+                      ? "bg-red-50 border-red-400 ring-2 ring-red-200"
+                      : hasPlan
+                        ? "bg-white border-slate-200 hover:border-slate-400"
+                        : "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-semibold">
+                      {pad2(day)}/{pad2(month)}
+                    </span>
+                    <span className="text-xs text-slate-500">{WEEKDAYS[dow]}</span>
+                  </div>
+                  {hasPlan ? (
+                    <div
+                      className={`text-xs mt-1 ${
+                        isAbsent ? "text-red-700" : "text-slate-600"
+                      }`}
+                    >
+                      {isAbsent ? "FALTOU · " : ""}
+                      {planned.join(", ")}
+                    </div>
+                  ) : (
+                    <div className="text-xs mt-1 text-slate-400">sem atendimento</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-4 text-xs text-slate-500">
+            Clique em um dia útil para marcar/desmarcar como falta. Dias sem atendimento
+            no plano semanal ficam desabilitados.
+          </div>
         </>
       )}
     </Card>
-  );
-}
-
-function AbsenceInput({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-
-  return (
-    <Input
-      type="number"
-      min={0}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        const n = Math.max(0, Number(draft) || 0);
-        if (n !== value) onChange(n);
-      }}
-      className="w-24 text-right"
-    />
   );
 }

@@ -7,7 +7,7 @@ import {
   type PatientMonthReport,
 } from "../api";
 import { Button, Card, Input, Label, Select } from "../components/Card";
-import { MONTHS, currentYearMonth, formatBRL } from "../utils";
+import { MONTHS, WEEKDAYS, currentYearMonth, formatBRL } from "../utils";
 
 type Mode = "patient" | "plan";
 
@@ -200,6 +200,27 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
           </tr>
         </tfoot>
       </table>
+      {report.absence_days.length > 0 && (
+        <div className="mt-4 text-sm">
+          <div className="font-medium text-slate-700 mb-1">Dias de falta:</div>
+          <ul className="space-y-1">
+            {report.absence_days.map((a) => {
+              const [y, m, d] = a.date.split("-");
+              return (
+                <li key={a.date} className="text-slate-600">
+                  <span className="font-mono">
+                    {d}/{m}/{y}
+                  </span>{" "}
+                  ({WEEKDAYS[a.day_of_week]}) —{" "}
+                  {a.impacted_specialties.length > 0
+                    ? a.impacted_specialties.join(", ")
+                    : "sem terapias previstas"}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </Card>
   );
 }

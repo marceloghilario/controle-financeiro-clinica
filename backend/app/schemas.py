@@ -1,3 +1,5 @@
+from datetime import date as date_type
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -86,21 +88,24 @@ class WeeklyPlanEntryRead(WeeklyPlanEntryBase):
     specialty_name: str | None = None
 
 
-class MonthlyAbsenceBase(BaseModel):
+class AbsenceDayBase(BaseModel):
     patient_id: int
-    specialty_id: int
-    year: int = Field(ge=2000, le=2100)
-    month: int = Field(ge=1, le=12)
-    count: int = Field(ge=0)
+    date: date_type
+    note: str | None = None
 
 
-class MonthlyAbsenceCreate(MonthlyAbsenceBase):
+class AbsenceDayCreate(AbsenceDayBase):
     pass
 
 
-class MonthlyAbsenceRead(MonthlyAbsenceBase):
+class AbsenceDayRead(AbsenceDayBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+
+
+class AbsenceDayDetailed(AbsenceDayRead):
+    day_of_week: int
+    impacted_specialties: list[str]
 
 
 class SpecialtyReportItem(BaseModel):
@@ -113,6 +118,12 @@ class SpecialtyReportItem(BaseModel):
     total: float
 
 
+class AbsenceDetail(BaseModel):
+    date: date_type
+    day_of_week: int
+    impacted_specialties: list[str]
+
+
 class PatientMonthReport(BaseModel):
     patient_id: int
     patient_name: str
@@ -122,6 +133,7 @@ class PatientMonthReport(BaseModel):
     month: int
     business_days_by_weekday: dict[int, int]
     items: list[SpecialtyReportItem]
+    absence_days: list[AbsenceDetail]
     total: float
 
 

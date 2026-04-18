@@ -326,57 +326,109 @@ def delete_weekly_plan_entry(entry_id: int, db: Session = Depends(get_db)) -> No
     db.commit()
 
 
-# --------- Faltas mensais ---------
+# --------- Faltas (por data) ---------
 
 
-@app.get("/api/absences", response_model=list[schemas.MonthlyAbsenceRead])
-def list_absences(
+def _impacted_specialties(db: Session, patient: models.Patient, day_of_week: int) -> list[str]:
+    """Retorna as especialidades planejadas do paciente naquele dia da semana."""
+    names: list[str] = []
+    seen: set[int] = set()
+    for entry in patient.weekly_entries:
+        if entry.day_of_week == day_of_week and entry.specialty_id not in seen:
+            seen.add(entry.specialty_id)
+            specialty = db.get(models.Specialty, entry.specialty_id)
+            if specialty:
+                names.append(specialty.name)
+    return sorted(names)
+
+
+@app.get("/api/absence-days", response_model=list[schemas.AbsenceDayDetailed])
+def list_absence_days(
+    patient_id: int,
     year: int,
     month: int,
-    patient_id: int | None = None,
     db: Session = Depends(get_db),
-) -> list[models.MonthlyAbsence]:
-    stmt = select(models.MonthlyAbsence).where(
-        models.MonthlyAbsence.year == year, models.MonthlyAbsence.month == month
+) -> list[schemas.AbsenceDayDetailed]:
+    patient = db.scalar(
+        select(models.Patient)
+        .options(selectinload(models.Patient.weekly_entries))
+        .where(models.Patient.id == patient_id)
     )
-    if patient_id is not None:
-        stmt = stmt.where(models.MonthlyAbsence.patient_id == patient_id)
-    return list(db.scalars(stmt))
-
-
-@app.post("/api/absences", response_model=schemas.MonthlyAbsenceRead, status_code=201)
-def upsert_absence(
-    data: schemas.MonthlyAbsenceCreate, db: Session = Depends(get_db)
-) -> models.MonthlyAbsence:
-    if not db.get(models.Patient, data.patient_id):
+    if not patient:
         raise HTTPException(status_code=404, detail="Paciente não encontrado.")
-    if not db.get(models.Specialty, data.specialty_id):
-        raise HTTPException(status_code=404, detail="Especialidade não encontrada.")
+    rows = list(
+        db.scalars(
+            select(models.AbsenceDay).where(
+                models.AbsenceDay.patient_id == patient_id,
+            )
+        )
+    )
+    result: list[schemas.AbsenceDayDetailed] = []
+    for a in rows:
+        if a.date.year != year or a.date.month != month:
+            continue
+        dow = a.date.weekday()
+        result.append(
+            schemas.AbsenceDayDetailed(
+                id=a.id,
+                patient_id=a.patient_id,
+                date=a.date,
+                note=a.note,
+                day_of_week=dow,
+                impacted_specialties=_impacted_specialties(db, patient, dow),
+            )
+        )
+    result.sort(key=lambda r: r.date)
+    return result
+
+
+@app.post("/api/absence-days", response_model=schemas.AbsenceDayDetailed, status_code=201)
+def upsert_absence_day(
+    data: schemas.AbsenceDayCreate, db: Session = Depends(get_db)
+) -> schemas.AbsenceDayDetailed:
+    patient = db.scalar(
+        select(models.Patient)
+        .options(selectinload(models.Patient.weekly_entries))
+        .where(models.Patient.id == data.patient_id)
+    )
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente não encontrado.")
 
     existing = db.scalar(
-        select(models.MonthlyAbsence).where(
-            models.MonthlyAbsence.patient_id == data.patient_id,
-            models.MonthlyAbsence.specialty_id == data.specialty_id,
-            models.MonthlyAbsence.year == data.year,
-            models.MonthlyAbsence.month == data.month,
+        select(models.AbsenceDay).where(
+            models.AbsenceDay.patient_id == data.patient_id,
+            models.AbsenceDay.date == data.date,
         )
     )
     if existing:
-        existing.count = data.count
+        existing.note = data.note
         db.commit()
         db.refresh(existing)
-        return existing
+        obj = existing
+    else:
+        obj = models.AbsenceDay(
+            patient_id=data.patient_id,
+            date=data.date,
+            note=data.note,
+        )
+        db.add(obj)
+        db.commit()
+        db.refresh(obj)
 
-    obj = models.MonthlyAbsence(**data.model_dump())
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-    return obj
+    dow = obj.date.weekday()
+    return schemas.AbsenceDayDetailed(
+        id=obj.id,
+        patient_id=obj.patient_id,
+        date=obj.date,
+        note=obj.note,
+        day_of_week=dow,
+        impacted_specialties=_impacted_specialties(db, patient, dow),
+    )
 
 
-@app.delete("/api/absences/{absence_id}", status_code=204)
-def delete_absence(absence_id: int, db: Session = Depends(get_db)) -> None:
-    obj = db.get(models.MonthlyAbsence, absence_id)
+@app.delete("/api/absence-days/{absence_id}", status_code=204)
+def delete_absence_day(absence_id: int, db: Session = Depends(get_db)) -> None:
+    obj = db.get(models.AbsenceDay, absence_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Falta não encontrada.")
     db.delete(obj)
@@ -391,7 +443,7 @@ def _load_patient_full(db: Session, patient_id: int) -> models.Patient | None:
         select(models.Patient)
         .options(
             selectinload(models.Patient.weekly_entries),
-            selectinload(models.Patient.absences),
+            selectinload(models.Patient.absence_days),
             selectinload(models.Patient.health_plan).selectinload(models.HealthPlan.prices),
         )
         .where(models.Patient.id == patient_id)
