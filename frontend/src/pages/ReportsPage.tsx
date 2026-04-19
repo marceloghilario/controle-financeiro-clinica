@@ -9,7 +9,13 @@ import {
   type PatientMonthReport,
 } from "../api";
 import { Button, Card, Input, Label, Select } from "../components/Card";
-import { MONTHS, WEEKDAYS, currentYearMonth, formatBRL } from "../utils";
+import {
+  MONTHS,
+  WEEKDAYS,
+  computeTaxes,
+  currentYearMonth,
+  formatBRL,
+} from "../utils";
 
 function buildInvoiceText(report: PatientMonthReport): string {
   const billedItems = report.items.filter((i) => i.sessions_billed > 0);
@@ -207,6 +213,7 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
     setGenerating(true);
     setGenMessage(null);
     try {
+      const { taxes, net } = computeTaxes(report.total);
       const payload = {
         issue_date: todayIso(),
         patient_id: report.patient_id,
@@ -215,14 +222,14 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
         reference_month: report.month,
         health_plan_name: report.health_plan_name,
         gross_value: report.total,
-        net_value: report.total,
-        taxes: 0,
+        net_value: net,
+        taxes,
         notes: invoiceText,
         status: "em_aberto" as const,
       };
       const created = await api.post<Invoice>("/api/invoices", payload);
       setGenMessage(
-        `Nota criada (#${created.id}) com valor bruto ${formatBRL(report.total)}. Redirecionando…`,
+        `Nota #${created.id}: bruto ${formatBRL(report.total)} · impostos ${formatBRL(taxes)} · líquido ${formatBRL(net)}. Redirecionando…`,
       );
       setTimeout(() => navigate("/notas-fiscais"), 900);
     } catch (e) {
@@ -339,6 +346,7 @@ function PlanPatientInvoiceButton({ report }: { report: PatientMonthReport }) {
     setGenerating(true);
     setMessage(null);
     try {
+      const { taxes, net } = computeTaxes(report.total);
       const payload = {
         issue_date: todayIso(),
         patient_id: report.patient_id,
@@ -347,13 +355,15 @@ function PlanPatientInvoiceButton({ report }: { report: PatientMonthReport }) {
         reference_month: report.month,
         health_plan_name: report.health_plan_name,
         gross_value: report.total,
-        net_value: report.total,
-        taxes: 0,
+        net_value: net,
+        taxes,
         notes: buildInvoiceText(report),
         status: "em_aberto" as const,
       };
       const created = await api.post<Invoice>("/api/invoices", payload);
-      setMessage(`Nota #${created.id} criada.`);
+      setMessage(
+        `Nota #${created.id}: líquido ${formatBRL(net)} (impostos ${formatBRL(taxes)})`,
+      );
     } catch (e) {
       setMessage(`Erro: ${(e as Error).message}`);
     } finally {

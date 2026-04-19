@@ -9,7 +9,7 @@ import {
   type Patient,
 } from "../api";
 import { Button, Card, Input, Label, Select } from "../components/Card";
-import { MONTHS, formatBRL } from "../utils";
+import { MONTHS, computeTaxes, formatBRL } from "../utils";
 
 type FormState = {
   number: string;
@@ -58,6 +58,13 @@ function parseBRLNumber(v: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function formatDecimal(n: number): string {
+  return n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function statusBadgeClass(status: InvoiceStatus): string {
   switch (status) {
     case "paga":
@@ -91,6 +98,7 @@ export default function InvoicesPage() {
   const [filterPatient, setFilterPatient] = useState<string>("");
   const [filterPlan, setFilterPlan] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | "">("");
+  const [autoTaxes, setAutoTaxes] = useState<boolean>(true);
 
   async function load() {
     const [inv, pats, pls] = await Promise.all([
@@ -356,12 +364,48 @@ export default function InvoicesPage() {
               <Label>Valor bruto</Label>
               <Input
                 value={form.gross_value}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, gross_value: e.target.value }))
-                }
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setForm((f) => {
+                    if (!autoTaxes) return { ...f, gross_value: raw };
+                    const gross = parseBRLNumber(raw);
+                    const { taxes, net } = computeTaxes(gross);
+                    return {
+                      ...f,
+                      gross_value: raw,
+                      taxes: gross > 0 ? formatDecimal(taxes) : "",
+                      net_value: gross > 0 ? formatDecimal(net) : "",
+                    };
+                  });
+                }}
                 placeholder="0,00"
                 inputMode="decimal"
               />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Impostos</Label>
+              <Input
+                value={form.taxes}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setForm((f) => {
+                    if (!autoTaxes) return { ...f, taxes: raw };
+                    const gross = parseBRLNumber(f.gross_value);
+                    const taxes = parseBRLNumber(raw);
+                    const net = Math.round((gross - taxes) * 100) / 100;
+                    return {
+                      ...f,
+                      taxes: raw,
+                      net_value: gross > 0 ? formatDecimal(net) : f.net_value,
+                    };
+                  });
+                }}
+                placeholder="0,00"
+                inputMode="decimal"
+              />
+              <div className="text-[11px] text-slate-500">
+                IRRF 1,50% + PIS 0,65% + COFINS 3% + CSLL 1% = 6,15%
+              </div>
             </div>
             <div className="flex flex-col gap-1">
               <Label>Valor líquido</Label>
@@ -373,15 +417,14 @@ export default function InvoicesPage() {
                 placeholder="0,00"
                 inputMode="decimal"
               />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label>Impostos</Label>
-              <Input
-                value={form.taxes}
-                onChange={(e) => setForm((f) => ({ ...f, taxes: e.target.value }))}
-                placeholder="0,00"
-                inputMode="decimal"
-              />
+              <label className="flex items-center gap-1 text-[11px] text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={autoTaxes}
+                  onChange={(e) => setAutoTaxes(e.target.checked)}
+                />
+                Calcular impostos e líquido automaticamente
+              </label>
             </div>
             <div className="flex flex-col gap-1">
               <Label>Status</Label>
