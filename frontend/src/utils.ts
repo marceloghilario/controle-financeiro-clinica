@@ -51,3 +51,40 @@ export function computeTaxes(gross: number): { taxes: number; net: number } {
   const net = Math.round((gross - taxes) * 100) / 100;
   return { taxes, net };
 }
+
+export type TaxBreakdown = {
+  irrf: number;
+  pis: number;
+  cofins: number;
+  csll: number;
+  total: number;
+  net: number;
+};
+
+function roundTo2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+export function computeTaxBreakdown(gross: number): TaxBreakdown {
+  const irrf = roundTo2(gross * TAX_RATES.irrf);
+  const pis = roundTo2(gross * TAX_RATES.pis);
+  const cofins = roundTo2(gross * TAX_RATES.cofins);
+  const csll = roundTo2(gross * TAX_RATES.csll);
+  const total = roundTo2(irrf + pis + cofins + csll);
+  const net = roundTo2(gross - total);
+  return { irrf, pis, cofins, csll, total, net };
+}
+
+export const TAX_LABELS: { key: keyof Omit<TaxBreakdown, "total" | "net">; label: string; rate: number }[] = [
+  { key: "irrf", label: "IRRF", rate: TAX_RATES.irrf },
+  { key: "pis", label: "PIS", rate: TAX_RATES.pis },
+  { key: "cofins", label: "COFINS", rate: TAX_RATES.cofins },
+  { key: "csll", label: "CSLL", rate: TAX_RATES.csll },
+];
+
+export function formatRatePercent(rate: number): string {
+  return `${(rate * 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`;
+}

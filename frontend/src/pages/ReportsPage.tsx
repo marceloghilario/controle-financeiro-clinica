@@ -11,10 +11,12 @@ import {
 import { Button, Card, Input, Label, Select } from "../components/Card";
 import {
   MONTHS,
+  TAX_LABELS,
   WEEKDAYS,
-  computeTaxes,
+  computeTaxBreakdown,
   currentYearMonth,
   formatBRL,
+  formatRatePercent,
 } from "../utils";
 
 function buildInvoiceText(report: PatientMonthReport): string {
@@ -37,7 +39,13 @@ function buildInvoiceText(report: PatientMonthReport): string {
     );
   }
   lines.push("");
-  lines.push(`Total: ${formatBRL(report.total)}`);
+  lines.push(`Valor bruto: ${formatBRL(report.total)}`);
+  const bd = computeTaxBreakdown(report.total);
+  for (const t of TAX_LABELS) {
+    lines.push(`- ${t.label} (${formatRatePercent(t.rate)}): ${formatBRL(bd[t.key])}`);
+  }
+  lines.push(`Total de impostos (6,15%): ${formatBRL(bd.total)}`);
+  lines.push(`Valor líquido: ${formatBRL(bd.net)}`);
   return lines.join("\n");
 }
 
@@ -185,6 +193,43 @@ export default function ReportsPage() {
   );
 }
 
+function TaxBreakdownBlock({ gross }: { gross: number }) {
+  const bd = computeTaxBreakdown(gross);
+  return (
+    <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm max-w-md">
+      <div className="font-medium text-slate-700 mb-2">
+        Impostos sobre o valor bruto
+      </div>
+      <table className="w-full">
+        <tbody>
+          <tr>
+            <td className="text-slate-600 py-0.5">Valor bruto</td>
+            <td className="text-right py-0.5 font-medium">{formatBRL(gross)}</td>
+          </tr>
+          {TAX_LABELS.map((t) => (
+            <tr key={t.key}>
+              <td className="text-slate-600 py-0.5">
+                {t.label} ({formatRatePercent(t.rate)})
+              </td>
+              <td className="text-right py-0.5">{formatBRL(bd[t.key])}</td>
+            </tr>
+          ))}
+          <tr className="border-t border-slate-200">
+            <td className="text-slate-700 py-1">Total de impostos (6,15%)</td>
+            <td className="text-right py-1">{formatBRL(bd.total)}</td>
+          </tr>
+          <tr>
+            <td className="font-semibold py-0.5">Valor líquido</td>
+            <td className="text-right font-semibold py-0.5">
+              {formatBRL(bd.net)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function todayIso(): string {
   const d = new Date();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -219,7 +264,7 @@ function GenerateInvoiceModal({
 
   if (!open) return null;
 
-  const { taxes, net } = computeTaxes(report.total);
+  const bd = computeTaxBreakdown(report.total);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -235,8 +280,8 @@ function GenerateInvoiceModal({
         reference_month: report.month,
         health_plan_name: report.health_plan_name,
         gross_value: report.total,
-        net_value: net,
-        taxes,
+        net_value: bd.net,
+        taxes: bd.total,
         notes: buildInvoiceText(report),
         status: "em_aberto" as const,
       };
@@ -288,13 +333,21 @@ function GenerateInvoiceModal({
               <span className="text-slate-600">Valor bruto</span>
               <span className="font-medium">{formatBRL(report.total)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Impostos (6,15%)</span>
-              <span>{formatBRL(taxes)}</span>
-            </div>
+            {TAX_LABELS.map((t) => (
+              <div key={t.key} className="flex justify-between">
+                <span className="text-slate-600">
+                  {t.label} ({formatRatePercent(t.rate)})
+                </span>
+                <span>{formatBRL(bd[t.key])}</span>
+              </div>
+            ))}
             <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
+              <span className="text-slate-700">Total de impostos (6,15%)</span>
+              <span>{formatBRL(bd.total)}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="font-semibold">Valor líquido</span>
-              <span className="font-semibold">{formatBRL(net)}</span>
+              <span className="font-semibold">{formatBRL(bd.net)}</span>
             </div>
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
@@ -389,6 +442,9 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
           </tr>
         </tfoot>
       </table>
+
+      <TaxBreakdownBlock gross={report.total} />
+
       {report.absence_days.length > 0 && (
         <div className="mt-4 text-sm">
           <div className="font-medium text-slate-700 mb-1">Dias de falta:</div>
@@ -523,6 +579,7 @@ function PlanReportCard({ report }: { report: HealthPlanMonthReport }) {
                     ))}
                   </tbody>
                 </table>
+                <TaxBreakdownBlock gross={p.total} />
                 <div className="mt-3 flex justify-end">
                   <PlanPatientInvoiceButton report={p} />
                 </div>
