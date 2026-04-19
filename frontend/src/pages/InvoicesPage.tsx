@@ -102,7 +102,7 @@ export default function InvoicesPage() {
   const [filterYear, setFilterYear] = useState<number | "">("");
   const [autoTaxes, setAutoTaxes] = useState<boolean>(true);
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
-  const [printInvoice, setPrintInvoice] = useState<Invoice | null>(null);
+  const [printing, setPrinting] = useState<boolean>(false);
 
   async function load() {
     const [inv, pats, pls] = await Promise.all([
@@ -482,6 +482,15 @@ export default function InvoicesPage() {
             ? `${filtered.length} de ${items.length} nota(s) (filtros ativos)`
             : `${items.length} nota(s) registrada(s)`
         }
+        actions={
+          <Button
+            variant="secondary"
+            onClick={() => setPrinting(true)}
+            disabled={filtered.length === 0}
+          >
+            Imprimir lista
+          </Button>
+        }
       >
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-4">
           <div className="flex flex-col gap-1 md:col-span-2">
@@ -650,13 +659,6 @@ export default function InvoicesPage() {
                         <Button
                           type="button"
                           variant="secondary"
-                          onClick={() => setPrintInvoice(inv)}
-                        >
-                          Imprimir
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
                           onClick={() => startEdit(inv)}
                         >
                           Editar
@@ -681,14 +683,18 @@ export default function InvoicesPage() {
       <InvoiceViewModal
         invoice={viewInvoice}
         onClose={() => setViewInvoice(null)}
-        onPrint={(inv) => {
-          setViewInvoice(null);
-          setPrintInvoice(inv);
-        }}
       />
-      <InvoicePrintFrame
-        invoice={printInvoice}
-        onDone={() => setPrintInvoice(null)}
+      <InvoiceListPrintFrame
+        active={printing}
+        invoices={filtered}
+        filters={{
+          patient: filterPatient,
+          plan: filterPlan,
+          status: filterStatus,
+          month: filterMonth,
+          year: filterYear,
+        }}
+        onDone={() => setPrinting(false)}
       />
     </div>
   );
@@ -697,11 +703,9 @@ export default function InvoicesPage() {
 function InvoiceViewModal({
   invoice,
   onClose,
-  onPrint,
 }: {
   invoice: Invoice | null;
   onClose: () => void;
-  onPrint: (inv: Invoice) => void;
 }) {
   if (!invoice) return null;
   return (
@@ -745,9 +749,6 @@ function InvoiceViewModal({
         <div className="border-t border-slate-200 px-4 py-3 flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Fechar
-          </Button>
-          <Button type="button" onClick={() => onPrint(invoice)}>
-            Imprimir
           </Button>
         </div>
       </div>
@@ -795,15 +796,27 @@ function DetailItem({
   );
 }
 
-function InvoicePrintFrame({
-  invoice,
+type ListPrintFilters = {
+  patient: string;
+  plan: string;
+  status: InvoiceStatus | "";
+  month: number | "";
+  year: number | "";
+};
+
+function InvoiceListPrintFrame({
+  active,
+  invoices,
+  filters,
   onDone,
 }: {
-  invoice: Invoice | null;
+  active: boolean;
+  invoices: Invoice[];
+  filters: ListPrintFilters;
   onDone: () => void;
 }) {
   useEffect(() => {
-    if (!invoice) return;
+    if (!active) return;
     const timer = setTimeout(() => {
       window.print();
     }, 100);
@@ -815,92 +828,104 @@ function InvoicePrintFrame({
       clearTimeout(timer);
       window.removeEventListener("afterprint", afterPrint);
     };
-  }, [invoice, onDone]);
+  }, [active, onDone]);
 
-  if (!invoice) return null;
+  if (!active) return null;
+
+  const totalGross = invoices.reduce((s, i) => s + i.gross_value, 0);
+  const totalTaxes = invoices.reduce((s, i) => s + i.taxes, 0);
+  const totalNet = invoices.reduce((s, i) => s + i.net_value, 0);
+
+  const activeFilters: string[] = [];
+  if (filters.patient) activeFilters.push(`Paciente: ${filters.patient}`);
+  if (filters.plan) activeFilters.push(`Plano: ${filters.plan}`);
+  if (filters.month !== "")
+    activeFilters.push(`Mês: ${MONTHS[(filters.month as number) - 1]}`);
+  if (filters.year !== "") activeFilters.push(`Ano: ${filters.year}`);
+  if (filters.status)
+    activeFilters.push(`Status: ${INVOICE_STATUS_LABELS[filters.status]}`);
 
   return (
     <div className="invoice-print-area">
-      <div className="p-8 max-w-3xl mx-auto text-slate-900">
-        <div className="flex items-start justify-between border-b border-slate-300 pb-3 mb-4">
-          <div>
-            <h1 className="text-xl font-bold">Nota Fiscal de Serviço</h1>
-            <div className="text-sm text-slate-600">
-              {invoice.number ? `Nº ${invoice.number}` : `Registro interno #${invoice.id}`}
-            </div>
+      <div className="p-6 text-slate-900">
+        <div className="border-b border-slate-300 pb-2 mb-3">
+          <h1 className="text-lg font-bold">Relação de notas fiscais</h1>
+          <div className="text-xs text-slate-600 mt-1">
+            {activeFilters.length > 0
+              ? `Filtros: ${activeFilters.join(" · ")}`
+              : "Sem filtros aplicados (todas as notas)"}
           </div>
-          <div className="text-right text-sm">
-            <div>
-              <span className="text-slate-500">Emissão: </span>
-              <span className="font-medium">{formatIsoDate(invoice.issue_date)}</span>
-            </div>
-            <div>
-              <span className="text-slate-500">Competência: </span>
-              <span className="font-medium">
-                {MONTHS[invoice.reference_month - 1]}/{invoice.reference_year}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500">Status: </span>
-              <span className="font-medium">
-                {INVOICE_STATUS_LABELS[invoice.status]}
-              </span>
-            </div>
+          <div className="text-xs text-slate-600">
+            Gerado em {new Date().toLocaleString("pt-BR")} · {invoices.length}{" "}
+            nota(s)
           </div>
         </div>
 
-        <section className="mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 mb-1">
-            Paciente
-          </h2>
-          <div className="text-base">{invoice.patient_name}</div>
-          {invoice.health_plan_name && (
-            <div className="text-sm text-slate-600">
-              Plano de saúde: {invoice.health_plan_name}
-            </div>
-          )}
-        </section>
-
-        <section className="mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 mb-1">
-            Valores
-          </h2>
-          <table className="w-full text-sm">
+        {invoices.length === 0 ? (
+          <div className="text-sm text-slate-600 py-4">
+            Nenhuma nota corresponde aos filtros.
+          </div>
+        ) : (
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-400">
+                <th className="text-left px-2 py-1">Nº</th>
+                <th className="text-left px-2 py-1">Emissão</th>
+                <th className="text-left px-2 py-1">Paciente</th>
+                <th className="text-left px-2 py-1">Referente</th>
+                <th className="text-left px-2 py-1">Plano</th>
+                <th className="text-right px-2 py-1">Bruto</th>
+                <th className="text-right px-2 py-1">Impostos</th>
+                <th className="text-right px-2 py-1">Líquido</th>
+                <th className="text-left px-2 py-1">Status</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr className="border-b border-slate-200">
-                <td className="py-1">Valor bruto</td>
-                <td className="py-1 text-right font-medium">
-                  {formatBRL(invoice.gross_value)}
-                </td>
-              </tr>
-              <tr className="border-b border-slate-200">
-                <td className="py-1">Impostos retidos (IRRF + PIS + COFINS + CSLL)</td>
-                <td className="py-1 text-right">{formatBRL(invoice.taxes)}</td>
-              </tr>
-              <tr>
-                <td className="py-2 font-semibold">Valor líquido</td>
-                <td className="py-2 text-right font-semibold">
-                  {formatBRL(invoice.net_value)}
-                </td>
-              </tr>
+              {invoices.map((inv) => (
+                <tr key={inv.id} className="border-b border-slate-200 align-top">
+                  <td className="px-2 py-1">{inv.number || "—"}</td>
+                  <td className="px-2 py-1 whitespace-nowrap">
+                    {formatIsoDate(inv.issue_date)}
+                  </td>
+                  <td className="px-2 py-1">{inv.patient_name}</td>
+                  <td className="px-2 py-1 whitespace-nowrap">
+                    {MONTHS[inv.reference_month - 1]}/{inv.reference_year}
+                  </td>
+                  <td className="px-2 py-1">{inv.health_plan_name || "—"}</td>
+                  <td className="px-2 py-1 text-right whitespace-nowrap">
+                    {formatBRL(inv.gross_value)}
+                  </td>
+                  <td className="px-2 py-1 text-right whitespace-nowrap">
+                    {formatBRL(inv.taxes)}
+                  </td>
+                  <td className="px-2 py-1 text-right whitespace-nowrap">
+                    {formatBRL(inv.net_value)}
+                  </td>
+                  <td className="px-2 py-1">
+                    {INVOICE_STATUS_LABELS[inv.status]}
+                  </td>
+                </tr>
+              ))}
             </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-400 font-semibold">
+                <td className="px-2 py-1" colSpan={5}>
+                  Totais ({invoices.length} nota{invoices.length === 1 ? "" : "s"})
+                </td>
+                <td className="px-2 py-1 text-right whitespace-nowrap">
+                  {formatBRL(totalGross)}
+                </td>
+                <td className="px-2 py-1 text-right whitespace-nowrap">
+                  {formatBRL(totalTaxes)}
+                </td>
+                <td className="px-2 py-1 text-right whitespace-nowrap">
+                  {formatBRL(totalNet)}
+                </td>
+                <td />
+              </tr>
+            </tfoot>
           </table>
-        </section>
-
-        {invoice.notes && (
-          <section className="mb-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 mb-1">
-              Descrição
-            </h2>
-            <pre className="whitespace-pre-wrap font-sans text-sm">
-{invoice.notes}
-            </pre>
-          </section>
         )}
-
-        <div className="mt-10 text-xs text-slate-500 border-t border-slate-300 pt-3">
-          Documento gerado em {new Date().toLocaleString("pt-BR")}
-        </div>
       </div>
     </div>
   );
