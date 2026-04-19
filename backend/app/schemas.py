@@ -1,6 +1,11 @@
 from datetime import date as date_type
+from datetime import datetime as datetime_type
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+InvoiceStatus = Literal["em_aberto", "emitida", "enviada", "paga", "cancelada"]
 
 
 class HealthPlanBase(BaseModel):
@@ -150,3 +155,47 @@ class HealthPlanMonthReport(BaseModel):
     month: int
     patients: list[PatientMonthReport]
     total: float
+
+
+class InvoiceBase(BaseModel):
+    number: str | None = None
+    issue_date: date_type
+    patient_id: int | None = None
+    patient_name: str
+    reference_year: int = Field(ge=2000, le=2100)
+    reference_month: int = Field(ge=1, le=12)
+    health_plan_name: str | None = None
+    gross_value: float = Field(ge=0)
+    net_value: float = Field(ge=0)
+    taxes: float = Field(ge=0)
+    notes: str | None = None
+    status: InvoiceStatus = "em_aberto"
+
+
+class InvoiceCreate(InvoiceBase):
+    pass
+
+
+class InvoiceUpdate(BaseModel):
+    number: str | None = None
+    issue_date: date_type | None = None
+    patient_id: int | None = None
+    patient_name: str | None = None
+    reference_year: int | None = Field(default=None, ge=2000, le=2100)
+    reference_month: int | None = Field(default=None, ge=1, le=12)
+    health_plan_name: str | None = None
+    gross_value: float | None = Field(default=None, ge=0)
+    net_value: float | None = Field(default=None, ge=0)
+    taxes: float | None = Field(default=None, ge=0)
+    notes: str | None = None
+    status: InvoiceStatus | None = None
+
+
+class InvoiceStatusUpdate(BaseModel):
+    status: InvoiceStatus
+
+
+class InvoiceRead(InvoiceBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_at: datetime_type

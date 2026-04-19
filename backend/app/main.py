@@ -527,3 +527,79 @@ def health_plan_report(
         patients=reports,
         total=total,
     )
+
+
+# --------- Notas fiscais ---------
+
+
+@app.get("/api/invoices", response_model=list[schemas.InvoiceRead])
+def list_invoices(db: Session = Depends(get_db)) -> list[models.Invoice]:
+    return list(
+        db.scalars(
+            select(models.Invoice).order_by(
+                models.Invoice.issue_date.desc(), models.Invoice.id.desc()
+            )
+        )
+    )
+
+
+@app.post("/api/invoices", response_model=schemas.InvoiceRead, status_code=201)
+def create_invoice(
+    data: schemas.InvoiceCreate, db: Session = Depends(get_db)
+) -> models.Invoice:
+    obj = models.Invoice(
+        number=(data.number or None),
+        issue_date=data.issue_date,
+        patient_id=data.patient_id,
+        patient_name=data.patient_name.strip(),
+        reference_year=data.reference_year,
+        reference_month=data.reference_month,
+        health_plan_name=(data.health_plan_name or None),
+        gross_value=data.gross_value,
+        net_value=data.net_value,
+        taxes=data.taxes,
+        notes=(data.notes or None),
+        status=data.status,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.put("/api/invoices/{invoice_id}", response_model=schemas.InvoiceRead)
+def update_invoice(
+    invoice_id: int, data: schemas.InvoiceUpdate, db: Session = Depends(get_db)
+) -> models.Invoice:
+    obj = db.get(models.Invoice, invoice_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Nota fiscal não encontrada.")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(obj, field, value)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.patch("/api/invoices/{invoice_id}/status", response_model=schemas.InvoiceRead)
+def update_invoice_status(
+    invoice_id: int,
+    data: schemas.InvoiceStatusUpdate,
+    db: Session = Depends(get_db),
+) -> models.Invoice:
+    obj = db.get(models.Invoice, invoice_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Nota fiscal não encontrada.")
+    obj.status = data.status
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.delete("/api/invoices/{invoice_id}", status_code=204)
+def delete_invoice(invoice_id: int, db: Session = Depends(get_db)) -> None:
+    obj = db.get(models.Invoice, invoice_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Nota fiscal não encontrada.")
+    db.delete(obj)
+    db.commit()

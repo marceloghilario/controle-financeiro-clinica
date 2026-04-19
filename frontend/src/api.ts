@@ -105,3 +105,45 @@ export type HealthPlanMonthReport = {
   patients: PatientMonthReport[];
   total: number;
 };
+
+export type InvoiceStatus =
+  | "em_aberto"
+  | "emitida"
+  | "enviada"
+  | "paga"
+  | "cancelada";
+
+export type Invoice = {
+  id: number;
+  number: string | null;
+  issue_date: string; // YYYY-MM-DD
+  patient_id: number | null;
+  patient_name: string;
+  reference_year: number;
+  reference_month: number;
+  health_plan_name: string | null;
+  gross_value: number;
+  net_value: number;
+  taxes: number;
+  notes: string | null;
+  status: InvoiceStatus;
+  created_at: string;
+};
+
+export type InvoiceInput = Omit<Invoice, "id" | "created_at">;
+
+export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
+  em_aberto: "Em aberto",
+  emitida: "Emitida",
+  enviada: "Enviada",
+  paga: "Paga",
+  cancelada: "Cancelada",
+};
+
+export const INVOICE_STATUS_ORDER: InvoiceStatus[] = [
+  "em_aberto",
+  "emitida",
+  "enviada",
+  "paga",
+  "cancelada",
+];

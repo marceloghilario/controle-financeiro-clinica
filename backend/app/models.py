@@ -1,9 +1,12 @@
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Date, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+
+
+INVOICE_STATUSES = ("em_aberto", "emitida", "enviada", "paga", "cancelada")
 
 
 class HealthPlan(Base):
@@ -105,3 +108,30 @@ class AbsenceDay(Base):
     note: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     patient: Mapped[Patient] = relationship(back_populates="absence_days")
+
+
+class Invoice(Base):
+    """Nota fiscal emitida para cobrança de um paciente/plano de saúde."""
+
+    __tablename__ = "invoices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    issue_date: Mapped[date] = mapped_column(Date, nullable=False)
+    patient_id: Mapped[int | None] = mapped_column(
+        ForeignKey("patients.id", ondelete="SET NULL"), nullable=True
+    )
+    patient_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    reference_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    reference_month: Mapped[int] = mapped_column(Integer, nullable=False)
+    health_plan_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    gross_value: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    net_value: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    taxes: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="em_aberto", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    patient: Mapped[Patient | None] = relationship()
