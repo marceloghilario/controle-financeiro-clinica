@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   api,
   type HealthPlan,
   type HealthPlanMonthReport,
+  type Invoice,
   type Patient,
   type PatientMonthReport,
 } from "../api";
@@ -177,9 +179,19 @@ export default function ReportsPage() {
   );
 }
 
+function todayIso(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 function PatientReportCard({ report }: { report: PatientMonthReport }) {
   const invoiceText = useMemo(() => buildInvoiceText(report), [report]);
   const [copied, setCopied] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genMessage, setGenMessage] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   async function copy() {
     try {
@@ -188,6 +200,35 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // clipboard indisponível — ignora; o usuário pode selecionar o texto
+    }
+  }
+
+  async function generateInvoice() {
+    setGenerating(true);
+    setGenMessage(null);
+    try {
+      const payload = {
+        issue_date: todayIso(),
+        patient_id: report.patient_id,
+        patient_name: report.patient_name,
+        reference_year: report.year,
+        reference_month: report.month,
+        health_plan_name: report.health_plan_name,
+        gross_value: report.total,
+        net_value: report.total,
+        taxes: 0,
+        notes: invoiceText,
+        status: "em_aberto" as const,
+      };
+      const created = await api.post<Invoice>("/api/invoices", payload);
+      setGenMessage(
+        `Nota criada (#${created.id}) com valor bruto ${formatBRL(report.total)}. Redirecionando…`,
+      );
+      setTimeout(() => navigate("/notas-fiscais"), 900);
+    } catch (e) {
+      setGenMessage(`Erro: ${(e as Error).message}`);
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -266,19 +307,67 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
       )}
 
       <div className="mt-6 border-t border-slate-200 pt-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
           <div className="font-medium text-slate-700">
             Texto para nota fiscal
           </div>
-          <Button variant="secondary" onClick={copy}>
-            {copied ? "Copiado!" : "Copiar texto"}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={copy}>
+              {copied ? "Copiado!" : "Copiar texto"}
+            </Button>
+            <Button onClick={generateInvoice} disabled={generating || report.total <= 0}>
+              {generating ? "Gerando…" : "Gerar nota"}
+            </Button>
+          </div>
         </div>
+        {genMessage && (
+          <div className="text-sm text-slate-600 mb-2">{genMessage}</div>
+        )}
         <pre className="whitespace-pre-wrap text-sm bg-slate-50 border border-slate-200 rounded-md p-3 font-sans">
 {invoiceText}
         </pre>
       </div>
     </Card>
+  );
+}
+
+function PlanPatientInvoiceButton({ report }: { report: PatientMonthReport }) {
+  const [generating, setGenerating] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function generate() {
+    setGenerating(true);
+    setMessage(null);
+    try {
+      const payload = {
+        issue_date: todayIso(),
+        patient_id: report.patient_id,
+        patient_name: report.patient_name,
+        reference_year: report.year,
+        reference_month: report.month,
+        health_plan_name: report.health_plan_name,
+        gross_value: report.total,
+        net_value: report.total,
+        taxes: 0,
+        notes: buildInvoiceText(report),
+        status: "em_aberto" as const,
+      };
+      const created = await api.post<Invoice>("/api/invoices", payload);
+      setMessage(`Nota #${created.id} criada.`);
+    } catch (e) {
+      setMessage(`Erro: ${(e as Error).message}`);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Button onClick={generate} disabled={generating || report.total <= 0}>
+        {generating ? "Gerando…" : "Gerar nota"}
+      </Button>
+      {message && <span className="text-xs text-slate-600">{message}</span>}
+    </div>
   );
 }
 
@@ -331,6 +420,9 @@ function PlanReportCard({ report }: { report: HealthPlanMonthReport }) {
                     ))}
                   </tbody>
                 </table>
+                <div className="mt-3 flex justify-end">
+                  <PlanPatientInvoiceButton report={p} />
+                </div>
               </div>
             </details>
           ))}

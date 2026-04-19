@@ -88,6 +88,9 @@ export default function InvoicesPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [filterPatient, setFilterPatient] = useState<string>("");
+  const [filterPlan, setFilterPlan] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<InvoiceStatus | "">("");
 
   async function load() {
     const [inv, pats, pls] = await Promise.all([
@@ -110,6 +113,33 @@ export default function InvoicesPage() {
     for (let y = current - 2; y <= current + 2; y++) list.push(y);
     return list;
   }, []);
+
+  const distinctPlanNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) if (it.health_plan_name) set.add(it.health_plan_name);
+    for (const p of plans) set.add(p.name);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [items, plans]);
+
+  const filtered = useMemo(() => {
+    return items.filter((inv) => {
+      if (filterStatus && inv.status !== filterStatus) return false;
+      if (filterPlan && (inv.health_plan_name ?? "") !== filterPlan) return false;
+      if (filterPatient) {
+        const q = filterPatient.toLowerCase();
+        if (!inv.patient_name.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [items, filterPatient, filterPlan, filterStatus]);
+
+  const hasActiveFilter = Boolean(filterPatient || filterPlan || filterStatus);
+
+  function clearFilters() {
+    setFilterPatient("");
+    setFilterPlan("");
+    setFilterStatus("");
+  }
 
   function resetForm() {
     setForm(emptyForm());
@@ -394,11 +424,72 @@ export default function InvoicesPage() {
 
       <Card
         title="Notas cadastradas"
-        subtitle={`${items.length} nota(s) registrada(s)`}
+        subtitle={
+          hasActiveFilter
+            ? `${filtered.length} de ${items.length} nota(s) (filtros ativos)`
+            : `${items.length} nota(s) registrada(s)`
+        }
       >
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+          <div className="flex flex-col gap-1 md:col-span-2">
+            <Label>Filtrar por paciente</Label>
+            <Input
+              value={filterPatient}
+              onChange={(e) => setFilterPatient(e.target.value)}
+              placeholder="Digite parte do nome"
+              list="filter-patient-options"
+            />
+            <datalist id="filter-patient-options">
+              {patients.map((p) => (
+                <option key={p.id} value={p.name} />
+              ))}
+            </datalist>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Plano de saúde</Label>
+            <Select
+              value={filterPlan}
+              onChange={(e) => setFilterPlan(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {distinctPlanNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Status</Label>
+            <Select
+              value={filterStatus}
+              onChange={(e) =>
+                setFilterStatus(e.target.value as InvoiceStatus | "")
+              }
+            >
+              <option value="">Todos</option>
+              {INVOICE_STATUS_ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {INVOICE_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {hasActiveFilter && (
+            <div className="md:col-span-4">
+              <Button type="button" variant="secondary" onClick={clearFilters}>
+                Limpar filtros
+              </Button>
+            </div>
+          )}
+        </div>
         {items.length === 0 ? (
           <div className="text-sm text-slate-500 py-6 text-center">
             Nenhuma nota cadastrada ainda. Clique em "+ Nova nota" para começar.
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-sm text-slate-500 py-6 text-center">
+            Nenhuma nota corresponde aos filtros aplicados.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -418,7 +509,7 @@ export default function InvoicesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {items.map((inv) => (
+                {filtered.map((inv) => (
                   <tr key={inv.id}>
                     <td className="px-3 py-2">{inv.number || "—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
