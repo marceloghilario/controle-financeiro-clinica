@@ -98,7 +98,11 @@ export default function InvoicesPage() {
   const [filterPatient, setFilterPatient] = useState<string>("");
   const [filterPlan, setFilterPlan] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | "">("");
+  const [filterMonth, setFilterMonth] = useState<number | "">("");
+  const [filterYear, setFilterYear] = useState<number | "">("");
   const [autoTaxes, setAutoTaxes] = useState<boolean>(true);
+  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
+  const [printInvoice, setPrintInvoice] = useState<Invoice | null>(null);
 
   async function load() {
     const [inv, pats, pls] = await Promise.all([
@@ -133,20 +137,26 @@ export default function InvoicesPage() {
     return items.filter((inv) => {
       if (filterStatus && inv.status !== filterStatus) return false;
       if (filterPlan && (inv.health_plan_name ?? "") !== filterPlan) return false;
+      if (filterMonth !== "" && inv.reference_month !== filterMonth) return false;
+      if (filterYear !== "" && inv.reference_year !== filterYear) return false;
       if (filterPatient) {
         const q = filterPatient.toLowerCase();
         if (!inv.patient_name.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [items, filterPatient, filterPlan, filterStatus]);
+  }, [items, filterPatient, filterPlan, filterStatus, filterMonth, filterYear]);
 
-  const hasActiveFilter = Boolean(filterPatient || filterPlan || filterStatus);
+  const hasActiveFilter = Boolean(
+    filterPatient || filterPlan || filterStatus || filterMonth !== "" || filterYear !== "",
+  );
 
   function clearFilters() {
     setFilterPatient("");
     setFilterPlan("");
     setFilterStatus("");
+    setFilterMonth("");
+    setFilterYear("");
   }
 
   function resetForm() {
@@ -473,7 +483,7 @@ export default function InvoicesPage() {
             : `${items.length} nota(s) registrada(s)`
         }
       >
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-4">
           <div className="flex flex-col gap-1 md:col-span-2">
             <Label>Filtrar por paciente</Label>
             <Input
@@ -488,7 +498,7 @@ export default function InvoicesPage() {
               ))}
             </datalist>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 md:col-span-2">
             <Label>Plano de saúde</Label>
             <Select
               value={filterPlan}
@@ -503,6 +513,38 @@ export default function InvoicesPage() {
             </Select>
           </div>
           <div className="flex flex-col gap-1">
+            <Label>Mês (referente)</Label>
+            <Select
+              value={filterMonth}
+              onChange={(e) =>
+                setFilterMonth(e.target.value === "" ? "" : Number(e.target.value))
+              }
+            >
+              <option value="">Todos</option>
+              {MONTHS.map((m, i) => (
+                <option key={i} value={i + 1}>
+                  {m}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Ano (referente)</Label>
+            <Select
+              value={filterYear}
+              onChange={(e) =>
+                setFilterYear(e.target.value === "" ? "" : Number(e.target.value))
+              }
+            >
+              <option value="">Todos</option>
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1 md:col-span-2">
             <Label>Status</Label>
             <Select
               value={filterStatus}
@@ -519,7 +561,7 @@ export default function InvoicesPage() {
             </Select>
           </div>
           {hasActiveFilter && (
-            <div className="md:col-span-4">
+            <div className="md:col-span-6">
               <Button type="button" variant="secondary" onClick={clearFilters}>
                 Limpar filtros
               </Button>
@@ -596,21 +638,37 @@ export default function InvoicesPage() {
                         </Select>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap space-x-1">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => startEdit(inv)}
-                      >
-                        Editar
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="danger"
-                        onClick={() => remove(inv.id)}
-                      >
-                        Excluir
-                      </Button>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      <div className="inline-flex flex-wrap gap-1 justify-end">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setViewInvoice(inv)}
+                        >
+                          Ver
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setPrintInvoice(inv)}
+                        >
+                          Imprimir
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => startEdit(inv)}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          onClick={() => remove(inv.id)}
+                        >
+                          Excluir
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -619,6 +677,231 @@ export default function InvoicesPage() {
           </div>
         )}
       </Card>
+
+      <InvoiceViewModal
+        invoice={viewInvoice}
+        onClose={() => setViewInvoice(null)}
+        onPrint={(inv) => {
+          setViewInvoice(null);
+          setPrintInvoice(inv);
+        }}
+      />
+      <InvoicePrintFrame
+        invoice={printInvoice}
+        onDone={() => setPrintInvoice(null)}
+      />
+    </div>
+  );
+}
+
+function InvoiceViewModal({
+  invoice,
+  onClose,
+  onPrint,
+}: {
+  invoice: Invoice | null;
+  onClose: () => void;
+  onPrint: (inv: Invoice) => void;
+}) {
+  if (!invoice) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 overflow-y-auto print:hidden"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between gap-2">
+          <div>
+            <h3 className="font-semibold text-slate-900">
+              Nota fiscal {invoice.number ? `nº ${invoice.number}` : `#${invoice.id}`}
+            </h3>
+            <p className="text-xs text-slate-500">
+              {MONTHS[invoice.reference_month - 1]}/{invoice.reference_year} ·{" "}
+              Emitida em {formatIsoDate(invoice.issue_date)}
+            </p>
+          </div>
+          <span
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${statusBadgeClass(
+              invoice.status,
+            )}`}
+          >
+            {INVOICE_STATUS_LABELS[invoice.status]}
+          </span>
+        </div>
+        <div className="p-4 space-y-3 text-sm">
+          <InvoiceDetailGrid invoice={invoice} />
+          {invoice.notes && (
+            <div>
+              <div className="font-medium text-slate-700 mb-1">Observações</div>
+              <pre className="whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded-md p-3 font-sans text-sm">
+{invoice.notes}
+              </pre>
+            </div>
+          )}
+        </div>
+        <div className="border-t border-slate-200 px-4 py-3 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Fechar
+          </Button>
+          <Button type="button" onClick={() => onPrint(invoice)}>
+            Imprimir
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InvoiceDetailGrid({ invoice }: { invoice: Invoice }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+      <DetailItem label="Número" value={invoice.number || "—"} />
+      <DetailItem label="Data de emissão" value={formatIsoDate(invoice.issue_date)} />
+      <DetailItem label="Paciente" value={invoice.patient_name} />
+      <DetailItem
+        label="Referente a"
+        value={`${MONTHS[invoice.reference_month - 1]}/${invoice.reference_year}`}
+      />
+      <DetailItem label="Plano de saúde" value={invoice.health_plan_name || "—"} />
+      <DetailItem label="Status" value={INVOICE_STATUS_LABELS[invoice.status]} />
+      <DetailItem label="Valor bruto" value={formatBRL(invoice.gross_value)} />
+      <DetailItem label="Impostos" value={formatBRL(invoice.taxes)} />
+      <DetailItem
+        label="Valor líquido"
+        value={formatBRL(invoice.net_value)}
+        strong
+      />
+    </div>
+  );
+}
+
+function DetailItem({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={strong ? "font-semibold" : "font-medium"}>{value}</div>
+    </div>
+  );
+}
+
+function InvoicePrintFrame({
+  invoice,
+  onDone,
+}: {
+  invoice: Invoice | null;
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    if (!invoice) return;
+    const timer = setTimeout(() => {
+      window.print();
+    }, 100);
+    function afterPrint() {
+      onDone();
+    }
+    window.addEventListener("afterprint", afterPrint);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("afterprint", afterPrint);
+    };
+  }, [invoice, onDone]);
+
+  if (!invoice) return null;
+
+  return (
+    <div className="invoice-print-area">
+      <div className="p-8 max-w-3xl mx-auto text-slate-900">
+        <div className="flex items-start justify-between border-b border-slate-300 pb-3 mb-4">
+          <div>
+            <h1 className="text-xl font-bold">Nota Fiscal de Serviço</h1>
+            <div className="text-sm text-slate-600">
+              {invoice.number ? `Nº ${invoice.number}` : `Registro interno #${invoice.id}`}
+            </div>
+          </div>
+          <div className="text-right text-sm">
+            <div>
+              <span className="text-slate-500">Emissão: </span>
+              <span className="font-medium">{formatIsoDate(invoice.issue_date)}</span>
+            </div>
+            <div>
+              <span className="text-slate-500">Competência: </span>
+              <span className="font-medium">
+                {MONTHS[invoice.reference_month - 1]}/{invoice.reference_year}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">Status: </span>
+              <span className="font-medium">
+                {INVOICE_STATUS_LABELS[invoice.status]}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <section className="mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 mb-1">
+            Paciente
+          </h2>
+          <div className="text-base">{invoice.patient_name}</div>
+          {invoice.health_plan_name && (
+            <div className="text-sm text-slate-600">
+              Plano de saúde: {invoice.health_plan_name}
+            </div>
+          )}
+        </section>
+
+        <section className="mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 mb-1">
+            Valores
+          </h2>
+          <table className="w-full text-sm">
+            <tbody>
+              <tr className="border-b border-slate-200">
+                <td className="py-1">Valor bruto</td>
+                <td className="py-1 text-right font-medium">
+                  {formatBRL(invoice.gross_value)}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="py-1">Impostos retidos (IRRF + PIS + COFINS + CSLL)</td>
+                <td className="py-1 text-right">{formatBRL(invoice.taxes)}</td>
+              </tr>
+              <tr>
+                <td className="py-2 font-semibold">Valor líquido</td>
+                <td className="py-2 text-right font-semibold">
+                  {formatBRL(invoice.net_value)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        {invoice.notes && (
+          <section className="mb-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 mb-1">
+              Descrição
+            </h2>
+            <pre className="whitespace-pre-wrap font-sans text-sm">
+{invoice.notes}
+            </pre>
+          </section>
+        )}
+
+        <div className="mt-10 text-xs text-slate-500 border-t border-slate-300 pt-3">
+          Documento gerado em {new Date().toLocaleString("pt-BR")}
+        </div>
+      </div>
     </div>
   );
 }

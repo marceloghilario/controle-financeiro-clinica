@@ -10,3 +10,31 @@ body {
   @apply bg-slate-50 text-slate-900;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
+
+.invoice-print-area {
+  display: none;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  .invoice-print-area {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #fff;
+  }
+  .invoice-print-area,
+  .invoice-print-area * {
+    visibility: visible !important;
+  }
+  @page {
+    margin: 14mm;
+  }
+}
