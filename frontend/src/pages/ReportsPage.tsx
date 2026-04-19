@@ -192,10 +192,130 @@ function todayIso(): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
+function GenerateInvoiceModal({
+  report,
+  open,
+  onClose,
+  onCreated,
+}: {
+  report: PatientMonthReport;
+  open: boolean;
+  onClose: () => void;
+  onCreated: (inv: Invoice) => void;
+}) {
+  const [number, setNumber] = useState("");
+  const [issueDate, setIssueDate] = useState(todayIso());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setNumber("");
+      setIssueDate(todayIso());
+      setError(null);
+      setSaving(false);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const { taxes, net } = computeTaxes(report.total);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        number: number.trim() || null,
+        issue_date: issueDate,
+        patient_id: report.patient_id,
+        patient_name: report.patient_name,
+        reference_year: report.year,
+        reference_month: report.month,
+        health_plan_name: report.health_plan_name,
+        gross_value: report.total,
+        net_value: net,
+        taxes,
+        notes: buildInvoiceText(report),
+        status: "em_aberto" as const,
+      };
+      const created = await api.post<Invoice>("/api/invoices", payload);
+      onCreated(created);
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="border-b border-slate-200 px-4 py-3">
+          <h3 className="font-semibold text-slate-900">Gerar nota fiscal</h3>
+          <p className="text-xs text-slate-500">
+            {report.patient_name} · {MONTHS[report.month - 1]}/{report.year} ·{" "}
+            {report.health_plan_name}
+          </p>
+        </div>
+        <form onSubmit={submit} className="p-4 space-y-3">
+          <div className="flex flex-col gap-1">
+            <Label>Número da nota</Label>
+            <Input
+              autoFocus
+              value={number}
+              onChange={(e) => setNumber(e.target.value)}
+              placeholder="Opcional"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Data de emissão</Label>
+            <Input
+              type="date"
+              value={issueDate}
+              onChange={(e) => setIssueDate(e.target.value)}
+              required
+            />
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm space-y-0.5">
+            <div className="flex justify-between">
+              <span className="text-slate-600">Valor bruto</span>
+              <span className="font-medium">{formatBRL(report.total)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-600">Impostos (6,15%)</span>
+              <span>{formatBRL(taxes)}</span>
+            </div>
+            <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
+              <span className="font-semibold">Valor líquido</span>
+              <span className="font-semibold">{formatBRL(net)}</span>
+            </div>
+          </div>
+          {error && <div className="text-sm text-red-600">{error}</div>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving || report.total <= 0}>
+              {saving ? "Gerando…" : "Gerar nota"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function PatientReportCard({ report }: { report: PatientMonthReport }) {
   const invoiceText = useMemo(() => buildInvoiceText(report), [report]);
   const [copied, setCopied] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [genMessage, setGenMessage] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -209,34 +329,12 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
     }
   }
 
-  async function generateInvoice() {
-    setGenerating(true);
-    setGenMessage(null);
-    try {
-      const { taxes, net } = computeTaxes(report.total);
-      const payload = {
-        issue_date: todayIso(),
-        patient_id: report.patient_id,
-        patient_name: report.patient_name,
-        reference_year: report.year,
-        reference_month: report.month,
-        health_plan_name: report.health_plan_name,
-        gross_value: report.total,
-        net_value: net,
-        taxes,
-        notes: invoiceText,
-        status: "em_aberto" as const,
-      };
-      const created = await api.post<Invoice>("/api/invoices", payload);
-      setGenMessage(
-        `Nota #${created.id}: bruto ${formatBRL(report.total)} · impostos ${formatBRL(taxes)} · líquido ${formatBRL(net)}. Redirecionando…`,
-      );
-      setTimeout(() => navigate("/notas-fiscais"), 900);
-    } catch (e) {
-      setGenMessage(`Erro: ${(e as Error).message}`);
-    } finally {
-      setGenerating(false);
-    }
+  function onCreated(inv: Invoice) {
+    setModalOpen(false);
+    setGenMessage(
+      `Nota #${inv.id}${inv.number ? ` (${inv.number})` : ""} criada. Redirecionando…`,
+    );
+    setTimeout(() => navigate("/notas-fiscais"), 800);
   }
 
   return (
@@ -322,8 +420,11 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
             <Button variant="secondary" onClick={copy}>
               {copied ? "Copiado!" : "Copiar texto"}
             </Button>
-            <Button onClick={generateInvoice} disabled={generating || report.total <= 0}>
-              {generating ? "Gerando…" : "Gerar nota"}
+            <Button
+              onClick={() => setModalOpen(true)}
+              disabled={report.total <= 0}
+            >
+              Gerar nota
             </Button>
           </div>
         </div>
@@ -334,49 +435,41 @@ function PatientReportCard({ report }: { report: PatientMonthReport }) {
 {invoiceText}
         </pre>
       </div>
+      <GenerateInvoiceModal
+        report={report}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onCreated={onCreated}
+      />
     </Card>
   );
 }
 
 function PlanPatientInvoiceButton({ report }: { report: PatientMonthReport }) {
-  const [generating, setGenerating] = useState(false);
+  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function generate() {
-    setGenerating(true);
-    setMessage(null);
-    try {
-      const { taxes, net } = computeTaxes(report.total);
-      const payload = {
-        issue_date: todayIso(),
-        patient_id: report.patient_id,
-        patient_name: report.patient_name,
-        reference_year: report.year,
-        reference_month: report.month,
-        health_plan_name: report.health_plan_name,
-        gross_value: report.total,
-        net_value: net,
-        taxes,
-        notes: buildInvoiceText(report),
-        status: "em_aberto" as const,
-      };
-      const created = await api.post<Invoice>("/api/invoices", payload);
-      setMessage(
-        `Nota #${created.id}: líquido ${formatBRL(net)} (impostos ${formatBRL(taxes)})`,
-      );
-    } catch (e) {
-      setMessage(`Erro: ${(e as Error).message}`);
-    } finally {
-      setGenerating(false);
-    }
+  function onCreated(inv: Invoice) {
+    setOpen(false);
+    setMessage(
+      `Nota #${inv.id}${inv.number ? ` (${inv.number})` : ""} criada · líquido ${formatBRL(
+        inv.net_value,
+      )}`,
+    );
   }
 
   return (
     <div className="flex items-center gap-2">
-      <Button onClick={generate} disabled={generating || report.total <= 0}>
-        {generating ? "Gerando…" : "Gerar nota"}
+      <Button onClick={() => setOpen(true)} disabled={report.total <= 0}>
+        Gerar nota
       </Button>
       {message && <span className="text-xs text-slate-600">{message}</span>}
+      <GenerateInvoiceModal
+        report={report}
+        open={open}
+        onClose={() => setOpen(false)}
+        onCreated={onCreated}
+      />
     </div>
   );
 }
