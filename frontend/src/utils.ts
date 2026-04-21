@@ -88,3 +88,9 @@ export function formatRatePercent(rate: number): string {
     maximumFractionDigits: 2,
   })}%`;
 }
+
+export function formatIsoDate(iso: string): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+}

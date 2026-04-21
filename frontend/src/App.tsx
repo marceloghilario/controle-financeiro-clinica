@@ -1,4 +1,5 @@
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes } from "react-router-dom";
+import HomePage from "./pages/HomePage";
 import PatientsPage from "./pages/PatientsPage";
 import HealthPlansPage from "./pages/HealthPlansPage";
 import SpecialtiesPage from "./pages/SpecialtiesPage";
@@ -23,6 +24,7 @@ function App() {
           </div>
           <nav className="flex flex-wrap gap-1 text-sm">
             {[
+              { to: "/", label: "Início", end: true },
               { to: "/pacientes", label: "Pacientes" },
               { to: "/plano-semanal", label: "Plano semanal" },
               { to: "/faltas", label: "Faltas" },
@@ -35,6 +37,7 @@ function App() {
               <NavLink
                 key={l.to}
                 to={l.to}
+                end={l.end}
                 className={({ isActive }) =>
                   `px-3 py-1.5 rounded-md font-medium transition ${
                     isActive
@@ -51,7 +54,7 @@ function App() {
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6">
         <Routes>
-          <Route path="/" element={<Navigate to="/pacientes" replace />} />
+          <Route path="/" element={<HomePage />} />
           <Route path="/pacientes" element={<PatientsPage />} />
           <Route path="/plano-semanal" element={<WeeklyPlanPage />} />
           <Route path="/faltas" element={<AbsencesPage />} />
