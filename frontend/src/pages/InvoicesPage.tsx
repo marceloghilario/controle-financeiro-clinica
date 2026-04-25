@@ -608,7 +608,6 @@ export default function InvoicesPage() {
                   <th className="text-left px-3 py-2">Referente</th>
                   <th className="text-right px-3 py-2">Bruto</th>
                   <th className="text-right px-3 py-2">Líquido</th>
-                  <th className="text-right px-3 py-2">Impostos</th>
                   <th className="text-left px-3 py-2">Status</th>
                   <th className="text-right px-3 py-2 w-40" />
                 </tr>
@@ -630,9 +629,6 @@ export default function InvoicesPage() {
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {formatBRL(inv.net_value)}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">
-                      {formatBRL(inv.taxes)}
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col gap-1">
@@ -844,7 +840,6 @@ function InvoiceListPrintFrame({
   if (!active) return null;
 
   const totalGross = invoices.reduce((s, i) => s + i.gross_value, 0);
-  const totalTaxes = invoices.reduce((s, i) => s + i.taxes, 0);
   const totalNet = invoices.reduce((s, i) => s + i.net_value, 0);
 
   const activeFilters: string[] = [];
@@ -886,7 +881,6 @@ function InvoiceListPrintFrame({
                 <th className="text-left px-2 py-1">Paciente</th>
                 <th className="text-left px-2 py-1">Referente</th>
                 <th className="text-right px-2 py-1">Bruto</th>
-                <th className="text-right px-2 py-1">Impostos</th>
                 <th className="text-right px-2 py-1">Líquido</th>
                 <th className="text-left px-2 py-1">Status</th>
               </tr>
@@ -907,9 +901,6 @@ function InvoiceListPrintFrame({
                     {formatBRL(inv.gross_value)}
                   </td>
                   <td className="px-2 py-1 text-right whitespace-nowrap">
-                    {formatBRL(inv.taxes)}
-                  </td>
-                  <td className="px-2 py-1 text-right whitespace-nowrap">
                     {formatBRL(inv.net_value)}
                   </td>
                   <td className="px-2 py-1">
@@ -925,9 +916,6 @@ function InvoiceListPrintFrame({
                 </td>
                 <td className="px-2 py-1 text-right whitespace-nowrap">
                   {formatBRL(totalGross)}
-                </td>
-                <td className="px-2 py-1 text-right whitespace-nowrap">
-                  {formatBRL(totalTaxes)}
                 </td>
                 <td className="px-2 py-1 text-right whitespace-nowrap">
                   {formatBRL(totalNet)}
