@@ -134,7 +134,7 @@ export default function InvoicesPage() {
   }, [items, plans]);
 
   const filtered = useMemo(() => {
-    return items.filter((inv) => {
+    const list = items.filter((inv) => {
       if (filterStatus && inv.status !== filterStatus) return false;
       if (filterPlan && (inv.health_plan_name ?? "") !== filterPlan) return false;
       if (filterMonth !== "" && inv.reference_month !== filterMonth) return false;
@@ -144,6 +144,17 @@ export default function InvoicesPage() {
         if (!inv.patient_name.toLowerCase().includes(q)) return false;
       }
       return true;
+    });
+    return list.sort((a, b) => {
+      const an = (a.number ?? "").trim();
+      const bn = (b.number ?? "").trim();
+      if (!an && !bn) return 0;
+      if (!an) return 1;
+      if (!bn) return -1;
+      const ai = Number(an);
+      const bi = Number(bn);
+      if (Number.isFinite(ai) && Number.isFinite(bi)) return ai - bi;
+      return an.localeCompare(bn, "pt-BR", { numeric: true });
     });
   }, [items, filterPatient, filterPlan, filterStatus, filterMonth, filterYear]);
 
@@ -591,10 +602,10 @@ export default function InvoicesPage() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="text-left px-3 py-2">Nº</th>
+                  <th className="text-left px-3 py-2">Tomador</th>
                   <th className="text-left px-3 py-2">Emissão</th>
                   <th className="text-left px-3 py-2">Paciente</th>
                   <th className="text-left px-3 py-2">Referente</th>
-                  <th className="text-left px-3 py-2">Plano</th>
                   <th className="text-right px-3 py-2">Bruto</th>
                   <th className="text-right px-3 py-2">Líquido</th>
                   <th className="text-right px-3 py-2">Impostos</th>
@@ -606,6 +617,7 @@ export default function InvoicesPage() {
                 {filtered.map((inv) => (
                   <tr key={inv.id}>
                     <td className="px-3 py-2">{inv.number || "—"}</td>
+                    <td className="px-3 py-2">{inv.health_plan_name || "—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {formatIsoDate(inv.issue_date)}
                     </td>
@@ -613,7 +625,6 @@ export default function InvoicesPage() {
                     <td className="px-3 py-2 whitespace-nowrap">
                       {MONTHS[inv.reference_month - 1]}/{inv.reference_year}
                     </td>
-                    <td className="px-3 py-2">{inv.health_plan_name || "—"}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {formatBRL(inv.gross_value)}
                     </td>
@@ -870,10 +881,10 @@ function InvoiceListPrintFrame({
             <thead>
               <tr className="border-b border-slate-400">
                 <th className="text-left px-2 py-1">Nº</th>
+                <th className="text-left px-2 py-1">Tomador</th>
                 <th className="text-left px-2 py-1">Emissão</th>
                 <th className="text-left px-2 py-1">Paciente</th>
                 <th className="text-left px-2 py-1">Referente</th>
-                <th className="text-left px-2 py-1">Plano</th>
                 <th className="text-right px-2 py-1">Bruto</th>
                 <th className="text-right px-2 py-1">Impostos</th>
                 <th className="text-right px-2 py-1">Líquido</th>
@@ -884,6 +895,7 @@ function InvoiceListPrintFrame({
               {invoices.map((inv) => (
                 <tr key={inv.id} className="border-b border-slate-200 align-top">
                   <td className="px-2 py-1">{inv.number || "—"}</td>
+                  <td className="px-2 py-1">{inv.health_plan_name || "—"}</td>
                   <td className="px-2 py-1 whitespace-nowrap">
                     {formatIsoDate(inv.issue_date)}
                   </td>
@@ -891,7 +903,6 @@ function InvoiceListPrintFrame({
                   <td className="px-2 py-1 whitespace-nowrap">
                     {MONTHS[inv.reference_month - 1]}/{inv.reference_year}
                   </td>
-                  <td className="px-2 py-1">{inv.health_plan_name || "—"}</td>
                   <td className="px-2 py-1 text-right whitespace-nowrap">
                     {formatBRL(inv.gross_value)}
                   </td>
