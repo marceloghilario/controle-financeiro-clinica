@@ -14,6 +14,8 @@ class HealthPlan(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    cnpj: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     patients: Mapped[list["Patient"]] = relationship(back_populates="health_plan")
     prices: Mapped[list["SpecialtyPrice"]] = relationship(

@@ -13,8 +13,14 @@ export default function HealthPlansPage() {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [prices, setPrices] = useState<SpecialtyPrice[]>([]);
   const [name, setName] = useState("");
+  const [cnpj, setCnpj] = useState("");
+  const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCnpj, setEditCnpj] = useState("");
+  const [editNotes, setEditNotes] = useState("");
 
   async function load() {
     const [p, s, pr] = await Promise.all([
@@ -35,8 +41,44 @@ export default function HealthPlansPage() {
     e.preventDefault();
     if (!name.trim()) return;
     try {
-      await api.post("/api/health-plans", { name });
+      await api.post("/api/health-plans", {
+        name,
+        cnpj: cnpj.trim() || null,
+        notes: notes.trim() || null,
+      });
       setName("");
+      setCnpj("");
+      setNotes("");
+      setError(null);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  function startEdit(p: HealthPlan) {
+    setEditingId(p.id);
+    setEditName(p.name);
+    setEditCnpj(p.cnpj ?? "");
+    setEditNotes(p.notes ?? "");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditName("");
+    setEditCnpj("");
+    setEditNotes("");
+  }
+
+  async function saveEdit(id: number) {
+    if (!editName.trim()) return;
+    try {
+      await api.put(`/api/health-plans/${id}`, {
+        name: editName,
+        cnpj: editCnpj.trim() || null,
+        notes: editNotes.trim() || null,
+      });
+      cancelEdit();
       setError(null);
       await load();
     } catch (e) {
@@ -68,14 +110,24 @@ export default function HealthPlansPage() {
       title="Planos de saúde"
       subtitle="Cadastre os convênios e, em cada um, as terapias atendidas com valor e código (opcional)"
     >
-      <form onSubmit={add} className="flex gap-2 mb-4">
+      <form onSubmit={add} className="grid gap-2 mb-4 sm:grid-cols-[1fr_180px_auto]">
         <Input
           placeholder="Nome do plano (ex: Unimed)"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="flex-1"
+        />
+        <Input
+          placeholder="CNPJ (opcional)"
+          value={cnpj}
+          onChange={(e) => setCnpj(e.target.value)}
         />
         <Button type="submit">Adicionar plano</Button>
+        <textarea
+          placeholder="Observação (opcional)"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="sm:col-span-3 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 min-h-[60px]"
+        />
       </form>
       {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
       {plans.length === 0 ? (
@@ -89,11 +141,11 @@ export default function HealthPlansPage() {
             const isOpen = !!expanded[p.id];
             return (
               <li key={p.id}>
-                <div className="flex items-center justify-between bg-white px-3 py-2">
+                <div className="flex items-center justify-between bg-white px-3 py-2 gap-3">
                   <button
                     type="button"
                     onClick={() => toggleExpand(p.id)}
-                    className="flex items-center gap-2 text-left flex-1"
+                    className="flex items-center gap-2 text-left flex-1 min-w-0"
                   >
                     <span
                       className={`inline-block transition-transform ${
@@ -102,13 +154,30 @@ export default function HealthPlansPage() {
                     >
                       ▶
                     </span>
-                    <span className="font-medium">{p.name}</span>
-                    <span className="text-xs text-slate-500">
-                      ({planPrices.length} terapia
-                      {planPrices.length === 1 ? "" : "s"})
-                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{p.name}</span>
+                        {p.cnpj && (
+                          <span className="text-xs text-slate-500">
+                            CNPJ {p.cnpj}
+                          </span>
+                        )}
+                        <span className="text-xs text-slate-500">
+                          ({planPrices.length} terapia
+                          {planPrices.length === 1 ? "" : "s"})
+                        </span>
+                      </div>
+                      {p.notes && (
+                        <div className="text-xs text-slate-500 truncate max-w-xl">
+                          {p.notes}
+                        </div>
+                      )}
+                    </div>
                   </button>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
+                    <Button variant="ghost" onClick={() => startEdit(p)}>
+                      Editar
+                    </Button>
                     <Button
                       variant="ghost"
                       onClick={() => toggleExpand(p.id)}
@@ -120,6 +189,38 @@ export default function HealthPlansPage() {
                     </Button>
                   </div>
                 </div>
+                {editingId === p.id && (
+                  <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 grid gap-2 sm:grid-cols-[1fr_180px]">
+                    <div>
+                      <Label>Nome</Label>
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label>CNPJ</Label>
+                      <Input
+                        value={editCnpj}
+                        onChange={(e) => setEditCnpj(e.target.value)}
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label>Observação</Label>
+                      <textarea
+                        value={editNotes}
+                        onChange={(e) => setEditNotes(e.target.value)}
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 min-h-[60px]"
+                      />
+                    </div>
+                    <div className="sm:col-span-2 flex justify-end gap-2">
+                      <Button variant="ghost" onClick={cancelEdit}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={() => saveEdit(p.id)}>Salvar</Button>
+                    </div>
+                  </div>
+                )}
                 {isOpen && (
                   <div className="bg-slate-50 px-4 py-3 border-t border-slate-200">
                     <PlanTherapiesEditor

@@ -10,10 +10,18 @@ InvoiceStatus = Literal["em_aberto", "emitida", "enviada", "paga", "cancelada"]
 
 class HealthPlanBase(BaseModel):
     name: str
+    cnpj: str | None = None
+    notes: str | None = None
 
 
 class HealthPlanCreate(HealthPlanBase):
     pass
+
+
+class HealthPlanUpdate(BaseModel):
+    name: str | None = None
+    cnpj: str | None = None
+    notes: str | None = None
 
 
 class HealthPlanRead(HealthPlanBase):

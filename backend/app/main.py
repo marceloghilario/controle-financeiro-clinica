@@ -37,6 +37,16 @@ def _migrate_sqlite() -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE specialty_prices ADD COLUMN therapy_code VARCHAR(50)"
             )
+        plan_cols = {
+            row[1]
+            for row in conn.exec_driver_sql(
+                "PRAGMA table_info(health_plans)"
+            ).fetchall()
+        }
+        if plan_cols and "cnpj" not in plan_cols:
+            conn.exec_driver_sql("ALTER TABLE health_plans ADD COLUMN cnpj VARCHAR(20)")
+        if plan_cols and "notes" not in plan_cols:
+            conn.exec_driver_sql("ALTER TABLE health_plans ADD COLUMN notes VARCHAR(500)")
 
 
 Base.metadata.create_all(bind=engine)

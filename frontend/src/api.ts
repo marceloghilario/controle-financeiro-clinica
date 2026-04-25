@@ -34,7 +34,12 @@ export const api = {
   del: (path: string) => request<void>(path, { method: "DELETE" }),
 };
 
-export type HealthPlan = { id: number; name: string };
+export type HealthPlan = {
+  id: number;
+  name: string;
+  cnpj?: string | null;
+  notes?: string | null;
+};
 export type Specialty = { id: number; name: string };
 export type SpecialtyPrice = {
   id: number;
