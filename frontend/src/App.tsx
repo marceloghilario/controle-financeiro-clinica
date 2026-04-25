@@ -3,7 +3,6 @@ import HomePage from "./pages/HomePage";
 import PatientsPage from "./pages/PatientsPage";
 import HealthPlansPage from "./pages/HealthPlansPage";
 import SpecialtiesPage from "./pages/SpecialtiesPage";
-import PricesPage from "./pages/PricesPage";
 import WeeklyPlanPage from "./pages/WeeklyPlanPage";
 import AbsencesPage from "./pages/AbsencesPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -32,7 +31,6 @@ function App() {
               { to: "/notas-fiscais", label: "Notas fiscais" },
               { to: "/planos-de-saude", label: "Planos de saúde" },
               { to: "/especialidades", label: "Especialidades" },
-              { to: "/precos", label: "Preços" },
             ].map((l) => (
               <NavLink
                 key={l.to}
@@ -62,7 +60,7 @@ function App() {
           <Route path="/notas-fiscais" element={<InvoicesPage />} />
           <Route path="/planos-de-saude" element={<HealthPlansPage />} />
           <Route path="/especialidades" element={<SpecialtiesPage />} />
-          <Route path="/precos" element={<PricesPage />} />
+          <Route path="/precos" element={<HealthPlansPage />} />
         </Routes>
       </main>
     </div>

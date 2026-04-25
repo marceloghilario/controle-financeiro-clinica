@@ -38,6 +38,7 @@ class SpecialtyPriceBase(BaseModel):
     specialty_id: int
     health_plan_id: int
     value: float = Field(ge=0)
+    therapy_code: str | None = None
 
 
 class SpecialtyPriceCreate(SpecialtyPriceBase):

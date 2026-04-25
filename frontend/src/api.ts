@@ -41,6 +41,7 @@ export type SpecialtyPrice = {
   specialty_id: number;
   health_plan_id: number;
   value: number;
+  therapy_code: string | null;
   specialty_name: string;
   health_plan_name: string;
 };

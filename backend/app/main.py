@@ -137,6 +137,7 @@ def list_specialty_prices(db: Session = Depends(get_db)) -> list[schemas.Special
             specialty_id=r.specialty_id,
             health_plan_id=r.health_plan_id,
             value=r.value,
+            therapy_code=r.therapy_code,
             specialty_name=r.specialty.name,
             health_plan_name=r.health_plan.name,
         )
@@ -148,6 +149,7 @@ def list_specialty_prices(db: Session = Depends(get_db)) -> list[schemas.Special
 def upsert_specialty_price(
     data: schemas.SpecialtyPriceCreate, db: Session = Depends(get_db)
 ) -> models.SpecialtyPrice:
+    therapy_code = (data.therapy_code.strip() if data.therapy_code else None) or None
     existing = db.scalar(
         select(models.SpecialtyPrice).where(
             models.SpecialtyPrice.specialty_id == data.specialty_id,
@@ -156,6 +158,7 @@ def upsert_specialty_price(
     )
     if existing:
         existing.value = data.value
+        existing.therapy_code = therapy_code
         db.commit()
         db.refresh(existing)
         return existing
@@ -169,6 +172,7 @@ def upsert_specialty_price(
         specialty_id=data.specialty_id,
         health_plan_id=data.health_plan_id,
         value=data.value,
+        therapy_code=therapy_code,
     )
     db.add(obj)
     db.commit()
@@ -594,6 +598,16 @@ def update_invoice_status(
     db.commit()
     db.refresh(obj)
     return obj
+
+
+@app.delete("/api/invoices/{invoice_id}", status_code=204)
+def delete_invoice(invoice_id: int, db: Session = Depends(get_db)) -> None:
+    obj = db.get(models.Invoice, invoice_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Nota fiscal não encontrada.")
+    db.delete(obj)
+    db.commit()
+turn obj
 
 
 @app.delete("/api/invoices/{invoice_id}", status_code=204)

@@ -45,6 +45,7 @@ class SpecialtyPrice(Base):
     specialty_id: Mapped[int] = mapped_column(ForeignKey("specialties.id"), nullable=False)
     health_plan_id: Mapped[int] = mapped_column(ForeignKey("health_plans.id"), nullable=False)
     value: Mapped[float] = mapped_column(Float, nullable=False)
+    therapy_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     specialty: Mapped[Specialty] = relationship(back_populates="prices")
     health_plan: Mapped[HealthPlan] = relationship(back_populates="prices")
