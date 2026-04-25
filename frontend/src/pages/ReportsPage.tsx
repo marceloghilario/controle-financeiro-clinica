@@ -19,7 +19,7 @@ import {
   formatRatePercent,
 } from "../utils";
 
-function buildInvoiceText(report: PatientMonthReport): string {
+export function buildInvoiceText(report: PatientMonthReport): string {
   const billedItems = report.items.filter((i) => i.sessions_billed > 0);
   const lines: string[] = [];
   lines.push(
@@ -39,13 +39,7 @@ function buildInvoiceText(report: PatientMonthReport): string {
     );
   }
   lines.push("");
-  lines.push(`Valor bruto: ${formatBRL(report.total)}`);
-  const bd = computeTaxBreakdown(report.total);
-  for (const t of TAX_LABELS) {
-    lines.push(`- ${t.label} (${formatRatePercent(t.rate)}): ${formatBRL(bd[t.key])}`);
-  }
-  lines.push(`Total de impostos (6,15%): ${formatBRL(bd.total)}`);
-  lines.push(`Valor líquido: ${formatBRL(bd.net)}`);
+  lines.push(`Valor total: ${formatBRL(report.total)}`);
   return lines.join("\n");
 }
 
@@ -365,7 +359,7 @@ function GenerateInvoiceModal({
   );
 }
 
-function PatientReportCard({ report }: { report: PatientMonthReport }) {
+export function PatientReportCard({ report }: { report: PatientMonthReport }) {
   const invoiceText = useMemo(() => buildInvoiceText(report), [report]);
   const [copied, setCopied] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);

@@ -45,14 +45,9 @@ const SHORTCUTS: { to: string; label: string; description: string }[] = [
     description: "Define por dia quais terapias cada paciente realiza",
   },
   {
-    to: "/faltas",
-    label: "Faltas",
-    description: "Marque os dias em que o paciente faltou no mês",
-  },
-  {
-    to: "/relatorios",
-    label: "Relatórios",
-    description: "Calcule sessões e valores por paciente ou plano",
+    to: "/sessao",
+    label: "Sessão",
+    description: "Faltas, feriados e relatório do paciente no mês",
   },
   {
     to: "/notas-fiscais",
@@ -254,10 +249,10 @@ export default function HomePage() {
             <div className="text-sm text-slate-500">
               Nenhuma nota emitida para o mês atual ainda.{" "}
               <Link
-                to="/relatorios"
+                to="/sessao"
                 className="text-slate-900 underline underline-offset-2"
               >
-                Gerar relatório
+                Abrir sessão
               </Link>
               .
             </div>

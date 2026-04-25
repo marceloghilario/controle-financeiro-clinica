@@ -93,6 +93,21 @@ class WeeklyPlanEntry(Base):
     specialty: Mapped[Specialty] = relationship(back_populates="weekly_entries")
 
 
+class Holiday(Base):
+    """Feriado global da clínica. Datas marcadas aqui são descontadas do
+    cálculo de dias úteis para todos os pacientes.
+    """
+
+    __tablename__ = "holidays"
+    __table_args__ = (
+        UniqueConstraint("date", name="uq_holiday_date"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    description: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
 class AbsenceDay(Base):
     """Dia em que o paciente faltou à clínica.
 

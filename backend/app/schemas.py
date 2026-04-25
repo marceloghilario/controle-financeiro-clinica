@@ -106,6 +106,20 @@ class WeeklyPlanEntryRead(WeeklyPlanEntryBase):
     specialty_name: str | None = None
 
 
+class HolidayBase(BaseModel):
+    date: date_type
+    description: str | None = None
+
+
+class HolidayCreate(HolidayBase):
+    pass
+
+
+class HolidayRead(HolidayBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
 class AbsenceDayBase(BaseModel):
     patient_id: int
     date: date_type

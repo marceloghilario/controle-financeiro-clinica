@@ -5,21 +5,30 @@ from __future__ import annotations
 import calendar
 from datetime import date
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import models, schemas
 
 
-def business_days_by_weekday(year: int, month: int) -> dict[int, int]:
-    """Retorna um dict {dia_da_semana: quantidade_no_mes} contando apenas dias úteis (seg–sex).
+def _holiday_dates_for_month(db: Session, year: int, month: int) -> set[date]:
+    rows = db.scalars(select(models.Holiday)).all()
+    return {h.date for h in rows if h.date.year == year and h.date.month == month}
 
-    day_of_week segue o padrão do Python: 0=Segunda, 1=Terça, ..., 4=Sexta, 5=Sábado, 6=Domingo.
+
+def business_days_by_weekday(
+    year: int, month: int, holiday_dates: set[date] | None = None
+) -> dict[int, int]:
+    """Retorna {dia_da_semana: quantidade_no_mes} contando dias úteis (seg–sex),
+    excluindo feriados informados.
     """
+    holiday_dates = holiday_dates or set()
     _, last_day = calendar.monthrange(year, month)
     counts: dict[int, int] = {i: 0 for i in range(7)}
     for day in range(1, last_day + 1):
+        d = date(year, month, day)
         dow = calendar.weekday(year, month, day)
-        if dow < 5:  # seg–sex
+        if dow < 5 and d not in holiday_dates:  # seg–sex e não feriado
             counts[dow] += 1
     return counts
 
@@ -27,27 +36,21 @@ def business_days_by_weekday(year: int, month: int) -> dict[int, int]:
 def compute_patient_month(
     db: Session, patient: models.Patient, year: int, month: int
 ) -> schemas.PatientMonthReport:
-    """Calcula o faturamento do paciente no mês.
-
-    A regra é: para cada dia útil do mês, somamos as sessões do plano semanal daquele
-    dia da semana. Se o paciente faltou naquele dia (AbsenceDay), as sessões daquele
-    dia inteiro entram como "faltas" (descontadas do total a faturar).
-    """
-    bdays = business_days_by_weekday(year, month)
+    """Calcula o faturamento do paciente no mês, descontando feriados globais."""
+    holiday_dates = _holiday_dates_for_month(db, year, month)
+    bdays = business_days_by_weekday(year, month, holiday_dates)
     _, last_day = calendar.monthrange(year, month)
 
-    # Monta um índice: dia_da_semana -> lista de (specialty_id, sessions)
+    # dia_da_semana -> lista de (specialty_id, sessions)
     by_weekday: dict[int, list[tuple[int, int]]] = {i: [] for i in range(7)}
     for entry in patient.weekly_entries:
-        if entry.day_of_week < 5:  # só seg-sex
+        if entry.day_of_week < 5:
             by_weekday[entry.day_of_week].append((entry.specialty_id, entry.sessions))
 
-    # Datas em que o paciente faltou neste mês
     absence_dates: set[date] = {
         a.date for a in patient.absence_days if a.date.year == year and a.date.month == month
     }
 
-    # Acumuladores por especialidade
     planned: dict[int, int] = {}
     absences: dict[int, int] = {}
     billed: dict[int, int] = {}
@@ -56,8 +59,11 @@ def compute_patient_month(
         dow = calendar.weekday(year, month, day)
         if dow >= 5:
             continue
-        entries = by_weekday.get(dow, [])
         d = date(year, month, day)
+        if d in holiday_dates:
+            # feriado: nem previsto, nem faltado, nem faturado
+            continue
+        entries = by_weekday.get(dow, [])
         is_absent = d in absence_dates
         for specialty_id, sessions in entries:
             planned[specialty_id] = planned.get(specialty_id, 0) + sessions
@@ -66,7 +72,6 @@ def compute_patient_month(
             else:
                 billed[specialty_id] = billed.get(specialty_id, 0) + sessions
 
-    # Mapa de preços (especialidade -> valor) para o plano do paciente
     prices = {p.specialty_id: p.value for p in patient.health_plan.prices}
 
     items: list[schemas.SpecialtyReportItem] = []
@@ -91,7 +96,6 @@ def compute_patient_month(
         )
     items.sort(key=lambda i: i.specialty_name)
 
-    # Detalhe das datas de falta (para exibir no relatório)
     absence_details: list[schemas.AbsenceDetail] = []
     for a in sorted(patient.absence_days, key=lambda a: a.date):
         if a.date.year != year or a.date.month != month:

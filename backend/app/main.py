@@ -490,6 +490,51 @@ def delete_absence_day(absence_id: int, db: Session = Depends(get_db)) -> None:
     db.commit()
 
 
+# --------- Feriados ---------
+
+
+@app.get("/api/holidays", response_model=list[schemas.HolidayRead])
+def list_holidays(
+    year: int | None = None,
+    month: int | None = None,
+    db: Session = Depends(get_db),
+) -> list[models.Holiday]:
+    query = select(models.Holiday).order_by(models.Holiday.date)
+    rows = list(db.scalars(query))
+    if year is not None:
+        rows = [h for h in rows if h.date.year == year]
+    if month is not None:
+        rows = [h for h in rows if h.date.month == month]
+    return rows
+
+
+@app.post("/api/holidays", response_model=schemas.HolidayRead, status_code=201)
+def create_holiday(
+    data: schemas.HolidayCreate, db: Session = Depends(get_db)
+) -> models.Holiday:
+    description = (data.description.strip() if data.description else None) or None
+    existing = db.scalar(select(models.Holiday).where(models.Holiday.date == data.date))
+    if existing:
+        existing.description = description
+        db.commit()
+        db.refresh(existing)
+        return existing
+    obj = models.Holiday(date=data.date, description=description)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.delete("/api/holidays/{holiday_id}", status_code=204)
+def delete_holiday(holiday_id: int, db: Session = Depends(get_db)) -> None:
+    obj = db.get(models.Holiday, holiday_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Feriado não encontrado.")
+    db.delete(obj)
+    db.commit()
+
+
 # --------- Relatórios ---------
 
 

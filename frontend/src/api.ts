@@ -67,6 +67,11 @@ export type WeeklyPlanEntry = {
   specialty_name?: string | null;
   sessions: number;
 };
+export type Holiday = {
+  id: number;
+  date: string; // YYYY-MM-DD
+  description: string | null;
+};
 export type AbsenceDay = {
   id: number;
   patient_id: number;

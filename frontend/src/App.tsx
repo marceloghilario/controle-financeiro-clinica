@@ -4,8 +4,7 @@ import PatientsPage from "./pages/PatientsPage";
 import HealthPlansPage from "./pages/HealthPlansPage";
 import SpecialtiesPage from "./pages/SpecialtiesPage";
 import WeeklyPlanPage from "./pages/WeeklyPlanPage";
-import AbsencesPage from "./pages/AbsencesPage";
-import ReportsPage from "./pages/ReportsPage";
+import SessionsPage from "./pages/SessionsPage";
 import InvoicesPage from "./pages/InvoicesPage";
 
 function App() {
@@ -26,8 +25,7 @@ function App() {
               { to: "/", label: "Início", end: true },
               { to: "/pacientes", label: "Pacientes" },
               { to: "/plano-semanal", label: "Plano semanal" },
-              { to: "/faltas", label: "Faltas" },
-              { to: "/relatorios", label: "Relatórios" },
+              { to: "/sessao", label: "Sessão" },
               { to: "/notas-fiscais", label: "Notas fiscais" },
               { to: "/planos-de-saude", label: "Planos de saúde" },
               { to: "/especialidades", label: "Especialidades" },
@@ -55,8 +53,9 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/pacientes" element={<PatientsPage />} />
           <Route path="/plano-semanal" element={<WeeklyPlanPage />} />
-          <Route path="/faltas" element={<AbsencesPage />} />
-          <Route path="/relatorios" element={<ReportsPage />} />
+          <Route path="/sessao" element={<SessionsPage />} />
+          <Route path="/faltas" element={<SessionsPage />} />
+          <Route path="/relatorios" element={<SessionsPage />} />
           <Route path="/notas-fiscais" element={<InvoicesPage />} />
           <Route path="/planos-de-saude" element={<HealthPlansPage />} />
           <Route path="/especialidades" element={<SpecialtiesPage />} />
