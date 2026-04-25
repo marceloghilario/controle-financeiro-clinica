@@ -27,6 +27,21 @@ def _migrate_sqlite() -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE patients ADD COLUMN beneficiary VARCHAR(200)"
             )
+        price_cols = {
+            row[1]
+            for row in conn.exec_driver_sql(
+                "PRAGMA table_info(specialty_prices)"
+            ).fetchall()
+        }
+        if price_cols and "therapy_code" not in price_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE specialty_prices ADD COLUMN therapy_code VARCHAR(50)"
+            )
+
+
+Base.metadata.create_all(bind=engine)
+_migrate_sqlite()
+
 
 app = FastAPI(title="Controle Financeiro Clínica", version="0.1.0")
 
@@ -37,12 +52,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    Base.metadata.create_all(bind=engine)
-    _migrate_sqlite()
 
 
 @app.get("/healthz")
@@ -598,16 +607,6 @@ def update_invoice_status(
     db.commit()
     db.refresh(obj)
     return obj
-
-
-@app.delete("/api/invoices/{invoice_id}", status_code=204)
-def delete_invoice(invoice_id: int, db: Session = Depends(get_db)) -> None:
-    obj = db.get(models.Invoice, invoice_id)
-    if not obj:
-        raise HTTPException(status_code=404, detail="Nota fiscal não encontrada.")
-    db.delete(obj)
-    db.commit()
-turn obj
 
 
 @app.delete("/api/invoices/{invoice_id}", status_code=204)
