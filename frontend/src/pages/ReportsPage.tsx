@@ -28,7 +28,6 @@ export function buildInvoiceText(report: PatientMonthReport): string {
   );
   lines.push(`Código do beneficiário: ${report.patient_beneficiary || "—"}`);
   lines.push(`Plano de saúde: ${report.health_plan_name}`);
-  lines.push(`Competência: ${MONTHS[report.month - 1]}/${report.year}`);
   lines.push("");
   lines.push("Referente às sessões de:");
   for (const i of billedItems) {
@@ -38,6 +37,9 @@ export function buildInvoiceText(report: PatientMonthReport): string {
       )} = ${formatBRL(i.total)}`,
     );
   }
+  lines.push(
+    `Sessões referentes ao mês ${MONTHS[report.month - 1]}/${report.year}.`,
+  );
   lines.push("");
   lines.push(`Valor total: ${formatBRL(report.total)}`);
   return lines.join("\n");
