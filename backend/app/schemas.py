@@ -5,7 +5,15 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-InvoiceStatus = Literal["em_aberto", "emitida", "enviada", "paga", "cancelada"]
+InvoiceStatus = Literal[
+    "em_aberto",
+    "emitida",
+    "enviada",
+    "paga",
+    "paga_parcial",
+    "paga_excedente",
+    "cancelada",
+]
 
 
 class HealthPlanBase(BaseModel):
@@ -234,6 +242,7 @@ class ReceiptBase(BaseModel):
     payer_health_plan_id: int | None = None
     payer_patient_id: int | None = None
     payer_name: str
+    linked_status: InvoiceStatus | None = None
     notes: str | None = None
 
 
@@ -248,6 +257,7 @@ class ReceiptUpdate(BaseModel):
     payer_health_plan_id: int | None = None
     payer_patient_id: int | None = None
     payer_name: str | None = None
+    linked_status: InvoiceStatus | None = None
     notes: str | None = None
     invoice_ids: list[int] | None = None
 

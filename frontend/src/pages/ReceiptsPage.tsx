@@ -3,6 +3,7 @@ import {
   api,
   INVOICE_STATUS_LABELS,
   type HealthPlan,
+  type InvoiceStatus,
   type InvoiceSubsetSuggestion,
   type InvoiceSuggestionsResponse,
   type Patient,
@@ -13,6 +14,12 @@ import {
 } from "../api";
 import { Button, Card, Input, Label, Select } from "../components/Card";
 import { formatBRL, formatIsoDate, MONTHS } from "../utils";
+
+const PAID_STATUSES: InvoiceStatus[] = [
+  "paga",
+  "paga_parcial",
+  "paga_excedente",
+];
 
 function parseBRL(v: string): number {
   if (!v) return 0;
@@ -40,6 +47,8 @@ type FormState = {
   payer_health_plan_id: number | "";
   payer_patient_id: number | "";
   payer_name: string;
+  linked_status: InvoiceStatus;
+  status_overridden: boolean;
   notes: string;
 };
 
@@ -52,8 +61,18 @@ const emptyForm = (): FormState => ({
   payer_health_plan_id: "",
   payer_patient_id: "",
   payer_name: "",
+  linked_status: "paga",
+  status_overridden: false,
   notes: "",
 });
+
+function suggestStatus(value: number, sumNet: number): InvoiceStatus {
+  if (sumNet <= 0) return "paga";
+  const diff = value - sumNet;
+  if (Math.abs(diff) < 0.01) return "paga";
+  if (diff < 0) return "paga_parcial";
+  return "paga_excedente";
+}
 
 export default function ReceiptsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -169,6 +188,8 @@ export default function ReceiptsPage() {
       payer_health_plan_id: r.payer_health_plan_id ?? "",
       payer_patient_id: r.payer_patient_id ?? "",
       payer_name: r.payer_name,
+      linked_status: r.linked_status ?? "paga",
+      status_overridden: true, // mantém o status escolhido anteriormente
       notes: r.notes ?? "",
     });
     setSelectedInvoiceIds(new Set(r.invoices.map((i) => i.id)));
@@ -213,6 +234,8 @@ export default function ReceiptsPage() {
           ? Number(form.payer_patient_id)
           : null,
       payer_name: form.payer_name.trim(),
+      linked_status:
+        selectedInvoiceIds.size > 0 ? form.linked_status : null,
       notes: form.notes.trim() || null,
       invoice_ids: Array.from(selectedInvoiceIds),
     };
@@ -252,6 +275,23 @@ export default function ReceiptsPage() {
     const sumNet = list.reduce((s, i) => s + i.net_value, 0);
     return { count: list.length, sumGross, sumNet };
   }, [candidates, selectedInvoiceIds]);
+
+  const suggestedStatus = useMemo(
+    () =>
+      selectedSummary.count > 0
+        ? suggestStatus(targetValue, selectedSummary.sumNet)
+        : "paga",
+    [targetValue, selectedSummary],
+  );
+
+  // auto-aplica o status sugerido enquanto o usuário não tiver editado manualmente
+  useEffect(() => {
+    if (form.status_overridden) return;
+    if (selectedInvoiceIds.size === 0) return;
+    setForm((f) =>
+      f.linked_status === suggestedStatus ? f : { ...f, linked_status: suggestedStatus },
+    );
+  }, [suggestedStatus, selectedInvoiceIds, form.status_overridden]);
 
   const filteredReceipts = useMemo(() => {
     return receipts.filter((r) => {
@@ -520,6 +560,59 @@ export default function ReceiptsPage() {
                     {formatBRL(selectedSummary.sumNet - targetValue)}
                   </strong>
                 </span>
+              </div>
+            )}
+
+            {selectedInvoiceIds.size > 0 && (
+              <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-slate-200 pt-3">
+                <div className="min-w-[220px]">
+                  <Label>Status a aplicar nas notas vinculadas</Label>
+                  <Select
+                    value={form.linked_status}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        linked_status: e.target.value as InvoiceStatus,
+                        status_overridden: true,
+                      }))
+                    }
+                  >
+                    {PAID_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {INVOICE_STATUS_LABELS[s]}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="text-xs text-slate-600 flex flex-col gap-0.5 pb-1.5">
+                  <span>
+                    Sugestão automática:{" "}
+                    <strong>{INVOICE_STATUS_LABELS[suggestedStatus]}</strong>
+                    {form.status_overridden &&
+                      form.linked_status !== suggestedStatus && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((f) => ({
+                              ...f,
+                              linked_status: suggestedStatus,
+                              status_overridden: false,
+                            }))
+                          }
+                          className="ml-2 underline text-slate-700 hover:text-slate-900"
+                        >
+                          aplicar sugestão
+                        </button>
+                      )}
+                  </span>
+                  <span className="text-slate-500">
+                    {targetValue > 0 && selectedSummary.sumNet > 0
+                      ? `Pago ${formatBRL(targetValue)} vs. soma líq ${formatBRL(
+                          selectedSummary.sumNet,
+                        )}`
+                      : "Informe o valor e selecione pelo menos uma nota"}
+                  </span>
+                </div>
               </div>
             )}
           </div>

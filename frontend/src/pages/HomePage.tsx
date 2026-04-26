@@ -113,6 +113,8 @@ export default function HomePage() {
       emitida: 0,
       enviada: 0,
       paga: 0,
+      paga_parcial: 0,
+      paga_excedente: 0,
       cancelada: 0,
     };
     for (const inv of invoices) counts[inv.status] += 1;

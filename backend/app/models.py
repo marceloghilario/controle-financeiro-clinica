@@ -6,7 +6,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
 
-INVOICE_STATUSES = ("em_aberto", "emitida", "enviada", "paga", "cancelada")
+INVOICE_STATUSES = (
+    "em_aberto",
+    "emitida",
+    "enviada",
+    "paga",
+    "paga_parcial",
+    "paga_excedente",
+    "cancelada",
+)
 
 
 class HealthPlan(Base):
@@ -179,6 +187,7 @@ class Receipt(Base):
         ForeignKey("patients.id", ondelete="SET NULL"), nullable=True
     )
     payer_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    linked_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False

@@ -122,6 +122,8 @@ export type InvoiceStatus =
   | "emitida"
   | "enviada"
   | "paga"
+  | "paga_parcial"
+  | "paga_excedente"
   | "cancelada";
 
 export type Invoice = {
@@ -148,6 +150,8 @@ export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   emitida: "Emitida",
   enviada: "Enviada",
   paga: "Paga",
+  paga_parcial: "Paga parcialmente",
+  paga_excedente: "Paga a mais",
   cancelada: "Cancelada",
 };
 
@@ -156,6 +160,8 @@ export const INVOICE_STATUS_ORDER: InvoiceStatus[] = [
   "emitida",
   "enviada",
   "paga",
+  "paga_parcial",
+  "paga_excedente",
   "cancelada",
 ];
 
@@ -182,6 +188,7 @@ export type Receipt = {
   payer_health_plan_id: number | null;
   payer_patient_id: number | null;
   payer_name: string;
+  linked_status: InvoiceStatus | null;
   notes: string | null;
   created_at: string;
   invoices: ReceiptInvoiceSummary[];
@@ -194,6 +201,7 @@ export type ReceiptInput = {
   payer_health_plan_id: number | null;
   payer_patient_id: number | null;
   payer_name: string;
+  linked_status: InvoiceStatus | null;
   notes: string | null;
   invoice_ids: number[];
 };

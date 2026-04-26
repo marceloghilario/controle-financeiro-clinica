@@ -47,6 +47,14 @@ def _migrate_sqlite() -> None:
             conn.exec_driver_sql("ALTER TABLE health_plans ADD COLUMN cnpj VARCHAR(20)")
         if plan_cols and "notes" not in plan_cols:
             conn.exec_driver_sql("ALTER TABLE health_plans ADD COLUMN notes VARCHAR(500)")
+        receipts_cols = {
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(receipts)").fetchall()
+        }
+        if receipts_cols and "linked_status" not in receipts_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE receipts ADD COLUMN linked_status VARCHAR(20)"
+            )
 
 
 Base.metadata.create_all(bind=engine)
@@ -700,6 +708,7 @@ def _receipt_read(r: models.Receipt) -> schemas.ReceiptRead:
         payer_health_plan_id=r.payer_health_plan_id,
         payer_patient_id=r.payer_patient_id,
         payer_name=r.payer_name,
+        linked_status=r.linked_status,  # type: ignore[arg-type]
         notes=r.notes,
         created_at=r.created_at,
         invoices=[_invoice_summary(link.invoice) for link in r.invoice_links if link.invoice],
@@ -807,23 +816,36 @@ def _subset_suggestions(
     return out
 
 
+_PAID_STATUSES = ("paga", "paga_parcial", "paga_excedente")
+
+
 def _refresh_invoice_status(db: Session, invoice_id: int) -> None:
-    """Marca como 'paga' se houver algum vínculo; volta para 'emitida' se não houver."""
+    """Atualiza o status da nota com base nos vínculos existentes.
+
+    - Se houver vínculo, aplica o linked_status do recebimento mais recente
+      (default 'paga' se não definido).
+    - Se não houver vínculo e a nota estava marcada como paga/parcial/excedente,
+      volta para 'emitida'.
+    - Notas canceladas não são alteradas.
+    """
     inv = db.get(models.Invoice, invoice_id)
     if not inv:
         return
     if inv.status == "cancelada":
         return
-    has_link = bool(
-        db.scalar(
-            select(models.ReceiptInvoice).where(
-                models.ReceiptInvoice.invoice_id == invoice_id
-            )
+    receipt = db.scalar(
+        select(models.Receipt)
+        .join(
+            models.ReceiptInvoice,
+            models.ReceiptInvoice.receipt_id == models.Receipt.id,
         )
+        .where(models.ReceiptInvoice.invoice_id == invoice_id)
+        .order_by(models.Receipt.created_at.desc())
+        .limit(1)
     )
-    if has_link:
-        inv.status = "paga"
-    elif inv.status == "paga":
+    if receipt is not None:
+        inv.status = receipt.linked_status or "paga"
+    elif inv.status in _PAID_STATUSES:
         inv.status = "emitida"
 
 
