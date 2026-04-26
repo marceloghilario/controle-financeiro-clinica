@@ -158,3 +158,55 @@ export const INVOICE_STATUS_ORDER: InvoiceStatus[] = [
   "paga",
   "cancelada",
 ];
+
+export type PayerType = "health_plan" | "patient" | "other";
+
+export type ReceiptInvoiceSummary = {
+  id: number;
+  number: string | null;
+  issue_date: string;
+  patient_name: string;
+  health_plan_name: string | null;
+  reference_year: number;
+  reference_month: number;
+  gross_value: number;
+  net_value: number;
+  status: InvoiceStatus;
+};
+
+export type Receipt = {
+  id: number;
+  payment_date: string; // YYYY-MM-DD
+  value: number;
+  payer_type: PayerType;
+  payer_health_plan_id: number | null;
+  payer_patient_id: number | null;
+  payer_name: string;
+  notes: string | null;
+  created_at: string;
+  invoices: ReceiptInvoiceSummary[];
+};
+
+export type ReceiptInput = {
+  payment_date: string;
+  value: number;
+  payer_type: PayerType;
+  payer_health_plan_id: number | null;
+  payer_patient_id: number | null;
+  payer_name: string;
+  notes: string | null;
+  invoice_ids: number[];
+};
+
+export type InvoiceSubsetSuggestion = {
+  invoice_ids: number[];
+  sum_gross: number;
+  sum_net: number;
+  diff_gross: number;
+  diff_net: number;
+};
+
+export type InvoiceSuggestionsResponse = {
+  candidates: ReceiptInvoiceSummary[];
+  suggestions: InvoiceSubsetSuggestion[];
+};

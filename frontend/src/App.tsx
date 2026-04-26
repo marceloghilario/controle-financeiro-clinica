@@ -6,6 +6,7 @@ import SpecialtiesPage from "./pages/SpecialtiesPage";
 import WeeklyPlanPage from "./pages/WeeklyPlanPage";
 import SessionsPage from "./pages/SessionsPage";
 import InvoicesPage from "./pages/InvoicesPage";
+import ReceiptsPage from "./pages/ReceiptsPage";
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
               { to: "/plano-semanal", label: "Plano semanal" },
               { to: "/sessao", label: "Sessão" },
               { to: "/notas-fiscais", label: "Notas fiscais" },
+              { to: "/recebimentos", label: "Recebimentos" },
               { to: "/planos-de-saude", label: "Planos de saúde" },
               { to: "/especialidades", label: "Especialidades" },
             ].map((l) => (
@@ -57,6 +59,7 @@ function App() {
           <Route path="/faltas" element={<SessionsPage />} />
           <Route path="/relatorios" element={<SessionsPage />} />
           <Route path="/notas-fiscais" element={<InvoicesPage />} />
+          <Route path="/recebimentos" element={<ReceiptsPage />} />
           <Route path="/planos-de-saude" element={<HealthPlansPage />} />
           <Route path="/especialidades" element={<SpecialtiesPage />} />
           <Route path="/precos" element={<HealthPlansPage />} />

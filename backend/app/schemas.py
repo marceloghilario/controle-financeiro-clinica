@@ -222,3 +222,64 @@ class InvoiceRead(InvoiceBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     created_at: datetime_type
+
+
+PayerType = Literal["health_plan", "patient", "other"]
+
+
+class ReceiptBase(BaseModel):
+    payment_date: date_type
+    value: float = Field(ge=0)
+    payer_type: PayerType
+    payer_health_plan_id: int | None = None
+    payer_patient_id: int | None = None
+    payer_name: str
+    notes: str | None = None
+
+
+class ReceiptCreate(ReceiptBase):
+    invoice_ids: list[int] = []
+
+
+class ReceiptUpdate(BaseModel):
+    payment_date: date_type | None = None
+    value: float | None = Field(default=None, ge=0)
+    payer_type: PayerType | None = None
+    payer_health_plan_id: int | None = None
+    payer_patient_id: int | None = None
+    payer_name: str | None = None
+    notes: str | None = None
+    invoice_ids: list[int] | None = None
+
+
+class ReceiptInvoiceSummary(BaseModel):
+    id: int
+    number: str | None = None
+    issue_date: date_type
+    patient_name: str
+    health_plan_name: str | None = None
+    reference_year: int
+    reference_month: int
+    gross_value: float
+    net_value: float
+    status: InvoiceStatus
+
+
+class ReceiptRead(ReceiptBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_at: datetime_type
+    invoices: list[ReceiptInvoiceSummary] = []
+
+
+class InvoiceSubsetSuggestion(BaseModel):
+    invoice_ids: list[int]
+    sum_gross: float
+    sum_net: float
+    diff_gross: float
+    diff_net: float
+
+
+class InvoiceSuggestionsResponse(BaseModel):
+    candidates: list[ReceiptInvoiceSummary]
+    suggestions: list[InvoiceSubsetSuggestion]

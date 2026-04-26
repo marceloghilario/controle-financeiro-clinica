@@ -671,3 +671,320 @@ def delete_invoice(invoice_id: int, db: Session = Depends(get_db)) -> None:
         raise HTTPException(status_code=404, detail="Nota fiscal não encontrada.")
     db.delete(obj)
     db.commit()
+
+
+# --------- Recebimentos ---------
+
+
+def _invoice_summary(inv: models.Invoice) -> schemas.ReceiptInvoiceSummary:
+    return schemas.ReceiptInvoiceSummary(
+        id=inv.id,
+        number=inv.number,
+        issue_date=inv.issue_date,
+        patient_name=inv.patient_name,
+        health_plan_name=inv.health_plan_name,
+        reference_year=inv.reference_year,
+        reference_month=inv.reference_month,
+        gross_value=inv.gross_value,
+        net_value=inv.net_value,
+        status=inv.status,  # type: ignore[arg-type]
+    )
+
+
+def _receipt_read(r: models.Receipt) -> schemas.ReceiptRead:
+    return schemas.ReceiptRead(
+        id=r.id,
+        payment_date=r.payment_date,
+        value=r.value,
+        payer_type=r.payer_type,  # type: ignore[arg-type]
+        payer_health_plan_id=r.payer_health_plan_id,
+        payer_patient_id=r.payer_patient_id,
+        payer_name=r.payer_name,
+        notes=r.notes,
+        created_at=r.created_at,
+        invoices=[_invoice_summary(link.invoice) for link in r.invoice_links if link.invoice],
+    )
+
+
+def _resolve_payer_name(
+    db: Session,
+    payer_type: str,
+    health_plan_id: int | None,
+    patient_id: int | None,
+    fallback: str | None,
+) -> str:
+    if payer_type == "health_plan" and health_plan_id is not None:
+        plan = db.get(models.HealthPlan, health_plan_id)
+        if plan:
+            return plan.name
+    if payer_type == "patient" and patient_id is not None:
+        pat = db.get(models.Patient, patient_id)
+        if pat:
+            return pat.name
+    return (fallback or "").strip() or "—"
+
+
+def _candidates_for_payer(
+    db: Session,
+    payer_type: str,
+    health_plan_id: int | None,
+    patient_id: int | None,
+    *,
+    include_invoice_ids: list[int] | None = None,
+) -> list[models.Invoice]:
+    """Notas em aberto/emitida/enviada para o pagador (descarta paga e cancelada).
+    Inclui também notas explícitas em include_invoice_ids (mesmo se já pagas)."""
+    query = select(models.Invoice).where(
+        models.Invoice.status.in_(("em_aberto", "emitida", "enviada"))
+    )
+    if payer_type == "health_plan" and health_plan_id is not None:
+        plan = db.get(models.HealthPlan, health_plan_id)
+        plan_name = plan.name if plan else None
+        if plan_name:
+            query = query.where(models.Invoice.health_plan_name == plan_name)
+    elif payer_type == "patient" and patient_id is not None:
+        query = query.where(models.Invoice.patient_id == patient_id)
+    rows = list(db.scalars(query.order_by(models.Invoice.issue_date.desc())))
+    if include_invoice_ids:
+        existing_ids = {i.id for i in rows}
+        for iid in include_invoice_ids:
+            if iid in existing_ids:
+                continue
+            inv = db.get(models.Invoice, iid)
+            if inv:
+                rows.append(inv)
+    return rows
+
+
+def _subset_suggestions(
+    invoices: list[models.Invoice],
+    target: float,
+    *,
+    max_size: int = 4,
+    max_candidates: int = 20,
+    top_n: int = 5,
+) -> list[schemas.InvoiceSubsetSuggestion]:
+    """Retorna até top_n combinações de invoices cuja soma (líquida) é
+    mais próxima do target. Limita a max_candidates entradas e tamanho até max_size
+    para manter a complexidade aceitável.
+    """
+    pool = invoices[:max_candidates]
+    n = len(pool)
+    found: list[tuple[float, list[int], float, float]] = []  # (diff_net, ids, sum_gross, sum_net)
+    # itera pelos tamanhos 1..max_size
+    from itertools import combinations
+
+    for size in range(1, max_size + 1):
+        if size > n:
+            break
+        for combo in combinations(range(n), size):
+            sum_gross = sum(pool[i].gross_value for i in combo)
+            sum_net = sum(pool[i].net_value for i in combo)
+            diff_net = abs(sum_net - target)
+            diff_gross = abs(sum_gross - target)
+            score = min(diff_net, diff_gross)
+            ids = [pool[i].id for i in combo]
+            found.append((score, ids, sum_gross, sum_net))
+    found.sort(key=lambda x: (x[0], len(x[1])))
+    seen: set[tuple[int, ...]] = set()
+    out: list[schemas.InvoiceSubsetSuggestion] = []
+    for score, ids, sg, sn in found:
+        key = tuple(sorted(ids))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            schemas.InvoiceSubsetSuggestion(
+                invoice_ids=ids,
+                sum_gross=sg,
+                sum_net=sn,
+                diff_gross=abs(sg - target),
+                diff_net=abs(sn - target),
+            )
+        )
+        if len(out) >= top_n:
+            break
+    return out
+
+
+def _refresh_invoice_status(db: Session, invoice_id: int) -> None:
+    """Marca como 'paga' se houver algum vínculo; volta para 'emitida' se não houver."""
+    inv = db.get(models.Invoice, invoice_id)
+    if not inv:
+        return
+    if inv.status == "cancelada":
+        return
+    has_link = bool(
+        db.scalar(
+            select(models.ReceiptInvoice).where(
+                models.ReceiptInvoice.invoice_id == invoice_id
+            )
+        )
+    )
+    if has_link:
+        inv.status = "paga"
+    elif inv.status == "paga":
+        inv.status = "emitida"
+
+
+@app.get("/api/receipts", response_model=list[schemas.ReceiptRead])
+def list_receipts(db: Session = Depends(get_db)) -> list[schemas.ReceiptRead]:
+    rows = list(
+        db.scalars(
+            select(models.Receipt)
+            .options(
+                selectinload(models.Receipt.invoice_links).selectinload(
+                    models.ReceiptInvoice.invoice
+                )
+            )
+            .order_by(models.Receipt.payment_date.desc(), models.Receipt.id.desc())
+        )
+    )
+    return [_receipt_read(r) for r in rows]
+
+
+@app.get(
+    "/api/receipts/suggestions",
+    response_model=schemas.InvoiceSuggestionsResponse,
+)
+def receipt_suggestions(
+    payer_type: str,
+    value: float,
+    payer_health_plan_id: int | None = None,
+    payer_patient_id: int | None = None,
+    db: Session = Depends(get_db),
+) -> schemas.InvoiceSuggestionsResponse:
+    if payer_type not in models.RECEIPT_PAYER_TYPES:
+        raise HTTPException(status_code=400, detail="Tipo de pagador inválido.")
+    candidates = _candidates_for_payer(
+        db, payer_type, payer_health_plan_id, payer_patient_id
+    )
+    suggestions = _subset_suggestions(candidates, target=value)
+    return schemas.InvoiceSuggestionsResponse(
+        candidates=[_invoice_summary(i) for i in candidates],
+        suggestions=suggestions,
+    )
+
+
+@app.get("/api/receipts/{receipt_id}", response_model=schemas.ReceiptRead)
+def get_receipt(receipt_id: int, db: Session = Depends(get_db)) -> schemas.ReceiptRead:
+    r = db.get(models.Receipt, receipt_id)
+    if not r:
+        raise HTTPException(status_code=404, detail="Recebimento não encontrado.")
+    return _receipt_read(r)
+
+
+@app.post("/api/receipts", response_model=schemas.ReceiptRead, status_code=201)
+def create_receipt(
+    data: schemas.ReceiptCreate, db: Session = Depends(get_db)
+) -> schemas.ReceiptRead:
+    if data.payer_type not in models.RECEIPT_PAYER_TYPES:
+        raise HTTPException(status_code=400, detail="Tipo de pagador inválido.")
+    payer_name = _resolve_payer_name(
+        db,
+        data.payer_type,
+        data.payer_health_plan_id,
+        data.payer_patient_id,
+        data.payer_name,
+    )
+    obj = models.Receipt(
+        payment_date=data.payment_date,
+        value=data.value,
+        payer_type=data.payer_type,
+        payer_health_plan_id=(
+            data.payer_health_plan_id if data.payer_type == "health_plan" else None
+        ),
+        payer_patient_id=(
+            data.payer_patient_id if data.payer_type == "patient" else None
+        ),
+        payer_name=payer_name,
+        notes=(data.notes or None),
+    )
+    db.add(obj)
+    db.flush()
+    for inv_id in data.invoice_ids:
+        inv = db.get(models.Invoice, inv_id)
+        if not inv:
+            continue
+        db.add(models.ReceiptInvoice(receipt_id=obj.id, invoice_id=inv_id))
+    db.flush()
+    for inv_id in data.invoice_ids:
+        _refresh_invoice_status(db, inv_id)
+    db.commit()
+    db.refresh(obj)
+    return _receipt_read(obj)
+
+
+@app.put("/api/receipts/{receipt_id}", response_model=schemas.ReceiptRead)
+def update_receipt(
+    receipt_id: int,
+    data: schemas.ReceiptUpdate,
+    db: Session = Depends(get_db),
+) -> schemas.ReceiptRead:
+    obj = db.get(models.Receipt, receipt_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Recebimento não encontrado.")
+    fields = data.model_dump(exclude_unset=True)
+    invoice_ids = fields.pop("invoice_ids", None)
+    for field, value in fields.items():
+        setattr(obj, field, value)
+    if (
+        data.payer_type is not None
+        or data.payer_health_plan_id is not None
+        or data.payer_patient_id is not None
+        or data.payer_name is not None
+    ):
+        obj.payer_name = _resolve_payer_name(
+            db,
+            obj.payer_type,
+            obj.payer_health_plan_id,
+            obj.payer_patient_id,
+            obj.payer_name,
+        )
+    if obj.payer_type == "health_plan":
+        obj.payer_patient_id = None
+    elif obj.payer_type == "patient":
+        obj.payer_health_plan_id = None
+    else:
+        obj.payer_health_plan_id = None
+        obj.payer_patient_id = None
+
+    affected_invoice_ids: set[int] = set()
+    if invoice_ids is not None:
+        prev_links = list(
+            db.scalars(
+                select(models.ReceiptInvoice).where(
+                    models.ReceiptInvoice.receipt_id == receipt_id
+                )
+            )
+        )
+        for link in prev_links:
+            affected_invoice_ids.add(link.invoice_id)
+            db.delete(link)
+        db.flush()
+        for inv_id in invoice_ids:
+            inv = db.get(models.Invoice, inv_id)
+            if not inv:
+                continue
+            affected_invoice_ids.add(inv_id)
+            db.add(models.ReceiptInvoice(receipt_id=receipt_id, invoice_id=inv_id))
+        db.flush()
+        for inv_id in affected_invoice_ids:
+            _refresh_invoice_status(db, inv_id)
+    db.commit()
+    db.refresh(obj)
+    return _receipt_read(obj)
+
+
+@app.delete("/api/receipts/{receipt_id}", status_code=204)
+def delete_receipt(receipt_id: int, db: Session = Depends(get_db)) -> None:
+    obj = db.get(models.Receipt, receipt_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Recebimento não encontrado.")
+    invoice_ids = [link.invoice_id for link in obj.invoice_links]
+    db.delete(obj)
+    db.flush()
+    for inv_id in invoice_ids:
+        _refresh_invoice_status(db, inv_id)
+    db.commit()
+

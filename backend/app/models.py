@@ -153,3 +153,57 @@ class Invoice(Base):
     )
 
     patient: Mapped[Patient | None] = relationship()
+    receipt_links: Mapped[list["ReceiptInvoice"]] = relationship(
+        back_populates="invoice", cascade="all, delete-orphan"
+    )
+
+
+RECEIPT_PAYER_TYPES = ("health_plan", "patient", "other")
+
+
+class Receipt(Base):
+    """Recebimento (entrada de caixa). Pode estar vinculado a uma ou mais
+    notas fiscais via tabela ReceiptInvoice.
+    """
+
+    __tablename__ = "receipts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    payment_date: Mapped[date] = mapped_column(Date, nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    payer_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    payer_health_plan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("health_plans.id", ondelete="SET NULL"), nullable=True
+    )
+    payer_patient_id: Mapped[int | None] = mapped_column(
+        ForeignKey("patients.id", ondelete="SET NULL"), nullable=True
+    )
+    payer_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    invoice_links: Mapped[list["ReceiptInvoice"]] = relationship(
+        back_populates="receipt", cascade="all, delete-orphan"
+    )
+
+
+class ReceiptInvoice(Base):
+    """Vínculo entre um recebimento e uma nota fiscal."""
+
+    __tablename__ = "receipt_invoices"
+    __table_args__ = (
+        UniqueConstraint("receipt_id", "invoice_id", name="uq_receipt_invoice"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    receipt_id: Mapped[int] = mapped_column(
+        ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False
+    )
+    invoice_id: Mapped[int] = mapped_column(
+        ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False
+    )
+
+    receipt: Mapped[Receipt] = relationship(back_populates="invoice_links")
+    invoice: Mapped[Invoice] = relationship(back_populates="receipt_links")
