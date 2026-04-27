@@ -104,6 +104,8 @@ export default function InvoicesPage() {
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | "">("");
   const [filterMonth, setFilterMonth] = useState<number | "">("");
   const [filterYear, setFilterYear] = useState<number | "">("");
+  const [filterIssueMonth, setFilterIssueMonth] = useState<number | "">("");
+  const [filterIssueYear, setFilterIssueYear] = useState<number | "">("");
   const [autoTaxes, setAutoTaxes] = useState<boolean>(true);
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
   const [printing, setPrinting] = useState<boolean>(false);
@@ -143,6 +145,14 @@ export default function InvoicesPage() {
       if (filterPlan && (inv.health_plan_name ?? "") !== filterPlan) return false;
       if (filterMonth !== "" && inv.reference_month !== filterMonth) return false;
       if (filterYear !== "" && inv.reference_year !== filterYear) return false;
+      if (filterIssueMonth !== "" || filterIssueYear !== "") {
+        const iso = (inv.issue_date ?? "").slice(0, 10);
+        const [y, m] = iso.split("-");
+        const issueYear = Number(y);
+        const issueMonth = Number(m);
+        if (filterIssueMonth !== "" && issueMonth !== filterIssueMonth) return false;
+        if (filterIssueYear !== "" && issueYear !== filterIssueYear) return false;
+      }
       if (filterPatient) {
         const q = filterPatient.toLowerCase();
         if (!inv.patient_name.toLowerCase().includes(q)) return false;
@@ -160,10 +170,25 @@ export default function InvoicesPage() {
       if (Number.isFinite(ai) && Number.isFinite(bi)) return ai - bi;
       return an.localeCompare(bn, "pt-BR", { numeric: true });
     });
-  }, [items, filterPatient, filterPlan, filterStatus, filterMonth, filterYear]);
+  }, [
+    items,
+    filterPatient,
+    filterPlan,
+    filterStatus,
+    filterMonth,
+    filterYear,
+    filterIssueMonth,
+    filterIssueYear,
+  ]);
 
   const hasActiveFilter = Boolean(
-    filterPatient || filterPlan || filterStatus || filterMonth !== "" || filterYear !== "",
+    filterPatient ||
+      filterPlan ||
+      filterStatus ||
+      filterMonth !== "" ||
+      filterYear !== "" ||
+      filterIssueMonth !== "" ||
+      filterIssueYear !== "",
   );
 
   function clearFilters() {
@@ -172,6 +197,8 @@ export default function InvoicesPage() {
     setFilterStatus("");
     setFilterMonth("");
     setFilterYear("");
+    setFilterIssueMonth("");
+    setFilterIssueYear("");
   }
 
   function resetForm() {
@@ -568,6 +595,42 @@ export default function InvoicesPage() {
               ))}
             </Select>
           </div>
+          <div className="flex flex-col gap-1">
+            <Label>Mês (emissão)</Label>
+            <Select
+              value={filterIssueMonth}
+              onChange={(e) =>
+                setFilterIssueMonth(
+                  e.target.value === "" ? "" : Number(e.target.value),
+                )
+              }
+            >
+              <option value="">Todos</option>
+              {MONTHS.map((m, i) => (
+                <option key={i} value={i + 1}>
+                  {m}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Ano (emissão)</Label>
+            <Select
+              value={filterIssueYear}
+              onChange={(e) =>
+                setFilterIssueYear(
+                  e.target.value === "" ? "" : Number(e.target.value),
+                )
+              }
+            >
+              <option value="">Todos</option>
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </Select>
+          </div>
           <div className="flex flex-col gap-1 md:col-span-2">
             <Label>Status</Label>
             <Select
@@ -704,6 +767,8 @@ export default function InvoicesPage() {
           status: filterStatus,
           month: filterMonth,
           year: filterYear,
+          issueMonth: filterIssueMonth,
+          issueYear: filterIssueYear,
         }}
         onDone={() => setPrinting(false)}
       />
@@ -813,6 +878,8 @@ type ListPrintFilters = {
   status: InvoiceStatus | "";
   month: number | "";
   year: number | "";
+  issueMonth: number | "";
+  issueYear: number | "";
 };
 
 function InvoiceListPrintFrame({
@@ -850,8 +917,15 @@ function InvoiceListPrintFrame({
   if (filters.patient) activeFilters.push(`Paciente: ${filters.patient}`);
   if (filters.plan) activeFilters.push(`Plano: ${filters.plan}`);
   if (filters.month !== "")
-    activeFilters.push(`Mês: ${MONTHS[(filters.month as number) - 1]}`);
-  if (filters.year !== "") activeFilters.push(`Ano: ${filters.year}`);
+    activeFilters.push(`Mês (referente): ${MONTHS[(filters.month as number) - 1]}`);
+  if (filters.year !== "")
+    activeFilters.push(`Ano (referente): ${filters.year}`);
+  if (filters.issueMonth !== "")
+    activeFilters.push(
+      `Mês (emissão): ${MONTHS[(filters.issueMonth as number) - 1]}`,
+    );
+  if (filters.issueYear !== "")
+    activeFilters.push(`Ano (emissão): ${filters.issueYear}`);
   if (filters.status)
     activeFilters.push(`Status: ${INVOICE_STATUS_LABELS[filters.status]}`);
 
