@@ -162,6 +162,31 @@ def create_specialty(
     return obj
 
 
+@app.put("/api/specialties/{specialty_id}", response_model=schemas.SpecialtyRead)
+def update_specialty(
+    specialty_id: int,
+    data: schemas.SpecialtyUpdate,
+    db: Session = Depends(get_db),
+) -> models.Specialty:
+    obj = db.get(models.Specialty, specialty_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Especialidade não encontrada.")
+    if data.name is not None:
+        new_name = data.name.strip()
+        if not new_name:
+            raise HTTPException(status_code=422, detail="Nome não pode ser vazio.")
+        obj.name = new_name
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="Já existe uma especialidade com esse nome."
+        ) from e
+    db.refresh(obj)
+    return obj
+
+
 @app.delete("/api/specialties/{specialty_id}", status_code=204)
 def delete_specialty(specialty_id: int, db: Session = Depends(get_db)) -> None:
     obj = db.get(models.Specialty, specialty_id)

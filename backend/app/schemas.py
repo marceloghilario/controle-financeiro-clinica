@@ -45,6 +45,10 @@ class SpecialtyCreate(SpecialtyBase):
     pass
 
 
+class SpecialtyUpdate(BaseModel):
+    name: str | None = None
+
+
 class SpecialtyRead(SpecialtyBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
