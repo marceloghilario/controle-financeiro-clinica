@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   api,
   type AbsenceDay,
+  type HealthPlan,
   type Holiday,
   type Patient,
   type PatientMonthReport,
@@ -22,6 +23,8 @@ function daysInMonth(year: number, month: number): number {
 
 export default function SessionsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [plans, setPlans] = useState<HealthPlan[]>([]);
+  const [planFilterId, setPlanFilterId] = useState<number | "">("");
   const [patientId, setPatientId] = useState<number | "">("");
 
   const now = currentYearMonth();
@@ -45,13 +48,30 @@ export default function SessionsPage() {
     Promise.all([
       api.get<Patient[]>("/api/patients"),
       api.get<Specialty[]>("/api/specialties"),
+      api.get<HealthPlan[]>("/api/health-plans"),
     ])
-      .then(([p, s]) => {
+      .then(([p, s, hp]) => {
         setPatients(p);
         setSpecialties(s);
+        setPlans(hp);
       })
       .catch((e) => setError((e as Error).message));
   }, []);
+
+  const filteredPatients = useMemo(() => {
+    if (planFilterId === "") return patients;
+    return patients.filter((p) => p.health_plan_id === planFilterId);
+  }, [patients, planFilterId]);
+
+  useEffect(() => {
+    if (
+      patientId !== "" &&
+      planFilterId !== "" &&
+      !filteredPatients.some((p) => p.id === patientId)
+    ) {
+      setPatientId("");
+    }
+  }, [patientId, planFilterId, filteredPatients]);
 
   async function loadHolidays() {
     try {
@@ -239,8 +259,26 @@ export default function SessionsPage() {
         title="Sessão"
         subtitle="Selecione o paciente e o mês para registrar faltas, feriados e ver o relatório do período."
       >
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div className="flex flex-col gap-1 md:col-span-2">
+            <Label>Filtrar por plano</Label>
+            <Select
+              value={planFilterId}
+              onChange={(e) =>
+                setPlanFilterId(
+                  e.target.value === "" ? "" : Number(e.target.value),
+                )
+              }
+            >
+              <option value="">Todos os planos</option>
+              {plans.map((pl) => (
+                <option key={pl.id} value={pl.id}>
+                  {pl.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1 md:col-span-3">
             <Label>Paciente</Label>
             <Select
               value={patientId}
@@ -248,8 +286,12 @@ export default function SessionsPage() {
                 setPatientId(e.target.value === "" ? "" : Number(e.target.value))
               }
             >
-              <option value="">Selecione…</option>
-              {patients.map((p) => (
+              <option value="">
+                {filteredPatients.length === 0
+                  ? "Nenhum paciente neste plano"
+                  : "Selecione…"}
+              </option>
+              {filteredPatients.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} · {p.health_plan_name}
                 </option>
