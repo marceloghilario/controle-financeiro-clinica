@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type HealthPlan, type Patient } from "../api";
 import { Button, Card, Input, Label, Select } from "../components/Card";
+import { formatCPF, isValidCPF, maskCPF, onlyDigits } from "../utils";
 
 export default function PatientsPage() {
   const [items, setItems] = useState<Patient[]>([]);
@@ -36,10 +37,15 @@ export default function PatientsPage() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || planId === "") return;
+    const cpfDigits = onlyDigits(cpf);
+    if (cpfDigits && !isValidCPF(cpfDigits)) {
+      setError("CPF inválido. Verifique os dígitos.");
+      return;
+    }
     try {
       const payload = {
         name,
-        cpf: cpf.trim() || null,
+        cpf: cpfDigits ? maskCPF(cpfDigits) : null,
         beneficiary: beneficiary.trim() || null,
         health_plan_id: Number(planId),
       };
@@ -59,7 +65,7 @@ export default function PatientsPage() {
   function startEdit(p: Patient) {
     setEditing(p);
     setName(p.name);
-    setCpf(p.cpf ?? "");
+    setCpf(p.cpf ? maskCPF(p.cpf) : "");
     setBeneficiary(p.beneficiary ?? "");
     setPlanId(p.health_plan_id);
   }
@@ -92,9 +98,14 @@ export default function PatientsPage() {
           <Label>CPF</Label>
           <Input
             value={cpf}
-            onChange={(e) => setCpf(e.target.value)}
+            onChange={(e) => setCpf(maskCPF(e.target.value))}
             placeholder="000.000.000-00"
+            inputMode="numeric"
+            maxLength={14}
           />
+          {cpf && onlyDigits(cpf).length === 11 && !isValidCPF(cpf) && (
+            <span className="text-xs text-red-600">CPF inválido</span>
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <Label>Código do beneficiário</Label>
@@ -145,7 +156,7 @@ export default function PatientsPage() {
             {items.map((p) => (
               <tr key={p.id}>
                 <td className="px-3 py-2">{p.name}</td>
-                <td className="px-3 py-2 text-slate-600">{p.cpf || "—"}</td>
+                <td className="px-3 py-2 text-slate-600">{formatCPF(p.cpf) || "—"}</td>
                 <td className="px-3 py-2 text-slate-600">{p.beneficiary || "—"}</td>
                 <td className="px-3 py-2">{p.health_plan_name}</td>
                 <td className="px-3 py-2 text-right space-x-2">

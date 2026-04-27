@@ -16,6 +16,7 @@ import {
   computeTaxBreakdown,
   currentYearMonth,
   formatBRL,
+  formatCPF,
   formatRatePercent,
 } from "../utils";
 
@@ -24,7 +25,7 @@ export function buildInvoiceText(report: PatientMonthReport): string {
   const lines: string[] = [];
   lines.push(
     `Sessão realizada pelo menor ${report.patient_name}` +
-      (report.patient_cpf ? ` - CPF: ${report.patient_cpf}` : ""),
+      (report.patient_cpf ? ` - CPF: ${formatCPF(report.patient_cpf)}` : ""),
   );
   lines.push(`Beneficiário: ${report.patient_beneficiary || "—"}`);
   for (const i of billedItems) {
@@ -388,7 +389,7 @@ export function PatientReportCard({ report }: { report: PatientMonthReport }) {
     <Card
       title={`${report.patient_name} · ${MONTHS[report.month - 1]}/${report.year}`}
       subtitle={`Plano de saúde: ${report.health_plan_name}${
-        report.patient_cpf ? ` · CPF ${report.patient_cpf}` : ""
+        report.patient_cpf ? ` · CPF ${formatCPF(report.patient_cpf)}` : ""
       }${
         report.patient_beneficiary
           ? ` · Cód. beneficiário: ${report.patient_beneficiary}`

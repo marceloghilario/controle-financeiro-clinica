@@ -6,7 +6,7 @@ import {
   type SpecialtyPrice,
 } from "../api";
 import { Button, Card, Input, Label, Select } from "../components/Card";
-import { formatBRL } from "../utils";
+import { formatBRL, formatCNPJ, isValidCNPJ, maskCNPJ, onlyDigits } from "../utils";
 
 export default function HealthPlansPage() {
   const [plans, setPlans] = useState<HealthPlan[]>([]);
@@ -40,10 +40,15 @@ export default function HealthPlansPage() {
   async function add(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    const cnpjDigits = onlyDigits(cnpj);
+    if (cnpjDigits && !isValidCNPJ(cnpjDigits)) {
+      setError("CNPJ inválido. Verifique os dígitos.");
+      return;
+    }
     try {
       await api.post("/api/health-plans", {
         name,
-        cnpj: cnpj.trim() || null,
+        cnpj: cnpjDigits ? maskCNPJ(cnpjDigits) : null,
         notes: notes.trim() || null,
       });
       setName("");
@@ -59,7 +64,7 @@ export default function HealthPlansPage() {
   function startEdit(p: HealthPlan) {
     setEditingId(p.id);
     setEditName(p.name);
-    setEditCnpj(p.cnpj ?? "");
+    setEditCnpj(p.cnpj ? maskCNPJ(p.cnpj) : "");
     setEditNotes(p.notes ?? "");
   }
 
@@ -72,10 +77,15 @@ export default function HealthPlansPage() {
 
   async function saveEdit(id: number) {
     if (!editName.trim()) return;
+    const cnpjDigits = onlyDigits(editCnpj);
+    if (cnpjDigits && !isValidCNPJ(cnpjDigits)) {
+      setError("CNPJ inválido. Verifique os dígitos.");
+      return;
+    }
     try {
       await api.put(`/api/health-plans/${id}`, {
         name: editName,
-        cnpj: editCnpj.trim() || null,
+        cnpj: cnpjDigits ? maskCNPJ(cnpjDigits) : null,
         notes: editNotes.trim() || null,
       });
       cancelEdit();
@@ -116,11 +126,18 @@ export default function HealthPlansPage() {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <Input
-          placeholder="CNPJ (opcional)"
-          value={cnpj}
-          onChange={(e) => setCnpj(e.target.value)}
-        />
+        <div className="flex flex-col gap-1">
+          <Input
+            placeholder="CNPJ (opcional)"
+            value={cnpj}
+            onChange={(e) => setCnpj(maskCNPJ(e.target.value))}
+            inputMode="numeric"
+            maxLength={18}
+          />
+          {cnpj && onlyDigits(cnpj).length === 14 && !isValidCNPJ(cnpj) && (
+            <span className="text-xs text-red-600">CNPJ inválido</span>
+          )}
+        </div>
         <Button type="submit">Adicionar plano</Button>
         <textarea
           placeholder="Observação (opcional)"
@@ -159,7 +176,7 @@ export default function HealthPlansPage() {
                         <span className="font-medium">{p.name}</span>
                         {p.cnpj && (
                           <span className="text-xs text-slate-500">
-                            CNPJ {p.cnpj}
+                            CNPJ {formatCNPJ(p.cnpj)}
                           </span>
                         )}
                         <span className="text-xs text-slate-500">
@@ -202,8 +219,17 @@ export default function HealthPlansPage() {
                       <Label>CNPJ</Label>
                       <Input
                         value={editCnpj}
-                        onChange={(e) => setEditCnpj(e.target.value)}
+                        onChange={(e) => setEditCnpj(maskCNPJ(e.target.value))}
+                        inputMode="numeric"
+                        maxLength={18}
                       />
+                      {editCnpj &&
+                        onlyDigits(editCnpj).length === 14 &&
+                        !isValidCNPJ(editCnpj) && (
+                          <span className="text-xs text-red-600">
+                            CNPJ inválido
+                          </span>
+                        )}
                     </div>
                     <div className="sm:col-span-2">
                       <Label>Observação</Label>
