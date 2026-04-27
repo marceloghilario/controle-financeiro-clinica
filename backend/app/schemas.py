@@ -43,6 +43,11 @@ class AuthGoogle(BaseModel):
     id_token: str
 
 
+class AuthChangePassword(BaseModel):
+    current_password: str | None = None
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class AuthResponse(BaseModel):
     access_token: str | None = None
     token_type: str = "bearer"

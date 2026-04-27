@@ -11,9 +11,12 @@ import LoginPage from "./pages/LoginPage";
 import UsersPage from "./pages/UsersPage";
 import { useAuth } from "./auth";
 import { Card } from "./components/Card";
+import ChangePasswordModal from "./components/ChangePasswordModal";
+import { useState } from "react";
 
 function App() {
   const { user, loading, pendingUser, logout } = useAuth();
+  const [showChangePw, setShowChangePw] = useState(false);
 
   if (loading) {
     return (
@@ -135,6 +138,9 @@ function App() {
           )}
         </Routes>
       </main>
+      {showChangePw && (
+        <ChangePasswordModal user={user} onClose={() => setShowChangePw(false)} />
+      )}
     </div>
   );
 }

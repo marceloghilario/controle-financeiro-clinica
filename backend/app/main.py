@@ -389,6 +389,24 @@ def auth_me(user: models.User = Depends(get_current_user)) -> schemas.UserRead:
     return _user_to_read(user)
 
 
+@app.post("/api/auth/change-password", response_model=schemas.UserRead)
+def auth_change_password(
+    data: schemas.AuthChangePassword,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+) -> schemas.UserRead:
+    # Se o usuário já tinha senha cadastrada, exige a senha atual.
+    if user.password_hash:
+        if not data.current_password or not verify_password(
+            data.current_password, user.password_hash
+        ):
+            raise HTTPException(status_code=400, detail="Senha atual incorreta.")
+    user.password_hash = hash_password(data.new_password)
+    db.commit()
+    db.refresh(user)
+    return _user_to_read(user)
+
+
 @app.get("/api/auth/config")
 def auth_config() -> dict[str, str | bool]:
     return {
