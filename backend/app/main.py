@@ -1,13 +1,28 @@
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, HTTPException
+from datetime import datetime
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from . import auth as auth_mod
 from . import billing, models, schemas
-from .database import Base, engine, get_db
+from .auth import (
+    SEED_ADMIN_EMAIL,
+    create_access_token,
+    decode_access_token,
+    get_current_user,
+    hash_password,
+    is_seed_admin,
+    require_admin,
+    verify_google_id_token,
+    verify_password,
+)
+from .database import Base, engine, get_db, SessionLocal
 
 
 def _migrate_sqlite() -> None:
@@ -134,8 +149,53 @@ def _seed_specialty_order(conn, only_unset: bool = False) -> None:
             )
 
 
+def _seed_admin_user() -> None:
+    """Garante que o admin semente (marceloghilario@gmail.com) existe e está ativo."""
+    db = SessionLocal()
+    try:
+        existing = db.scalar(
+            select(models.User).where(func.lower(models.User.email) == SEED_ADMIN_EMAIL)
+        )
+        if existing is None:
+            db.add(
+                models.User(
+                    email=SEED_ADMIN_EMAIL,
+                    name="Marcelo Hilario",
+                    role="admin",
+                    status="active",
+                    approved_at=datetime.utcnow(),
+                )
+            )
+            db.commit()
+        else:
+            changed = False
+            if existing.role != "admin":
+                existing.role = "admin"
+                changed = True
+            if existing.status != "active":
+                existing.status = "active"
+                if existing.approved_at is None:
+                    existing.approved_at = datetime.utcnow()
+                changed = True
+            if changed:
+                db.commit()
+    finally:
+        db.close()
+
+
 Base.metadata.create_all(bind=engine)
 _migrate_sqlite()
+_seed_admin_user()
+
+
+# Rotas que NÃO exigem autenticação (prefixos):
+PUBLIC_PATH_PREFIXES = (
+    "/healthz",
+    "/api/auth/",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+)
 
 
 app = FastAPI(title="Controle Financeiro Clínica", version="0.1.0")
@@ -149,9 +209,250 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Bloqueia chamadas a /api/* sem token válido (exceto /api/auth/*)."""
+    path = request.url.path
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    if any(path.startswith(p) for p in PUBLIC_PATH_PREFIXES):
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization") or ""
+    token = None
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header.split(None, 1)[1].strip() or None
+    if not token:
+        return JSONResponse(
+            status_code=401, content={"detail": "Não autenticado."}
+        )
+    payload = decode_access_token(token)
+    if not payload or "sub" not in payload:
+        return JSONResponse(status_code=401, content={"detail": "Sessão inválida."})
+    try:
+        user_id = int(payload["sub"])
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=401, content={"detail": "Sessão inválida."})
+    db = SessionLocal()
+    try:
+        user = db.get(models.User, user_id)
+        if not user or user.status != "active":
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Acesso pendente ou revogado."},
+            )
+    finally:
+        db.close()
+    return await call_next(request)
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# --------- Auth ---------
+
+
+def _user_to_read(u: models.User) -> schemas.UserRead:
+    return schemas.UserRead(
+        id=u.id,
+        email=u.email,
+        name=u.name,
+        role=u.role,
+        status=u.status,
+        permissions=u.permissions,
+        created_at=u.created_at,
+        approved_at=u.approved_at,
+        has_password=bool(u.password_hash),
+    )
+
+
+@app.post("/api/auth/register", response_model=schemas.AuthResponse)
+def auth_register(
+    data: schemas.AuthRegister, db: Session = Depends(get_db)
+) -> schemas.AuthResponse:
+    email_norm = data.email.strip().lower()
+    existing = db.scalar(
+        select(models.User).where(func.lower(models.User.email) == email_norm)
+    )
+    if existing is not None:
+        if existing.password_hash:
+            raise HTTPException(
+                status_code=409, detail="Já existe uma conta com esse e-mail."
+            )
+        # Conta criada antes via Google: completar com senha agora.
+        existing.password_hash = hash_password(data.password)
+        if data.name and not existing.name:
+            existing.name = data.name.strip()
+        db.commit()
+        db.refresh(existing)
+        if existing.status == "active":
+            return schemas.AuthResponse(
+                access_token=create_access_token(existing.id),
+                user=_user_to_read(existing),
+            )
+        return schemas.AuthResponse(pending=True, user=_user_to_read(existing))
+
+    is_seed = is_seed_admin(email_norm)
+    user = models.User(
+        email=email_norm,
+        name=data.name.strip() or email_norm,
+        password_hash=hash_password(data.password),
+        role="admin" if is_seed else "user",
+        status="active" if is_seed else "pending",
+        approved_at=datetime.utcnow() if is_seed else None,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    if user.status == "active":
+        return schemas.AuthResponse(
+            access_token=create_access_token(user.id),
+            user=_user_to_read(user),
+        )
+    return schemas.AuthResponse(pending=True, user=_user_to_read(user))
+
+
+@app.post("/api/auth/login", response_model=schemas.AuthResponse)
+def auth_login(
+    data: schemas.AuthLogin, db: Session = Depends(get_db)
+) -> schemas.AuthResponse:
+    email_norm = data.email.strip().lower()
+    user = db.scalar(
+        select(models.User).where(func.lower(models.User.email) == email_norm)
+    )
+    if not user or not verify_password(data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="E-mail ou senha inválidos.")
+    if user.status == "revoked":
+        raise HTTPException(status_code=403, detail="Acesso revogado.")
+    if user.status == "pending":
+        return schemas.AuthResponse(pending=True, user=_user_to_read(user))
+    return schemas.AuthResponse(
+        access_token=create_access_token(user.id),
+        user=_user_to_read(user),
+    )
+
+
+@app.post("/api/auth/google", response_model=schemas.AuthResponse)
+def auth_google(
+    data: schemas.AuthGoogle, db: Session = Depends(get_db)
+) -> schemas.AuthResponse:
+    info = verify_google_id_token(data.id_token)
+    email_norm = (info.get("email") or "").strip().lower()
+    sub = info.get("sub") or ""
+    name = info.get("name") or email_norm
+    user = db.scalar(
+        select(models.User).where(func.lower(models.User.email) == email_norm)
+    )
+    if user is None:
+        is_seed = is_seed_admin(email_norm)
+        user = models.User(
+            email=email_norm,
+            name=name,
+            google_sub=sub,
+            role="admin" if is_seed else "user",
+            status="active" if is_seed else "pending",
+            approved_at=datetime.utcnow() if is_seed else None,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        changed = False
+        if not user.google_sub:
+            user.google_sub = sub
+            changed = True
+        if is_seed_admin(email_norm) and user.status != "active":
+            user.status = "active"
+            user.role = "admin"
+            user.approved_at = user.approved_at or datetime.utcnow()
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(user)
+
+    if user.status == "revoked":
+        raise HTTPException(status_code=403, detail="Acesso revogado.")
+    if user.status == "pending":
+        return schemas.AuthResponse(pending=True, user=_user_to_read(user))
+    return schemas.AuthResponse(
+        access_token=create_access_token(user.id),
+        user=_user_to_read(user),
+    )
+
+
+@app.get("/api/auth/me", response_model=schemas.UserRead)
+def auth_me(user: models.User = Depends(get_current_user)) -> schemas.UserRead:
+    return _user_to_read(user)
+
+
+@app.get("/api/auth/config")
+def auth_config() -> dict[str, str | bool]:
+    return {
+        "google_client_id": auth_mod.GOOGLE_CLIENT_ID,
+        "google_enabled": bool(auth_mod.GOOGLE_CLIENT_ID),
+    }
+
+
+# --------- Usuários (admin) ---------
+
+
+@app.get("/api/users", response_model=list[schemas.UserRead])
+def list_users(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+) -> list[schemas.UserRead]:
+    rows = list(db.scalars(select(models.User).order_by(models.User.created_at.desc())))
+    return [_user_to_read(u) for u in rows]
+
+
+@app.patch("/api/users/{user_id}", response_model=schemas.UserRead)
+def update_user(
+    user_id: int,
+    data: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> schemas.UserRead:
+    user = db.get(models.User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if user.id == admin.id and (
+        data.role is not None and data.role != "admin"
+        or data.status is not None and data.status != "active"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Você não pode rebaixar ou desativar a si mesmo.",
+        )
+    if data.role is not None:
+        user.role = data.role
+    if data.status is not None:
+        if user.status == "pending" and data.status == "active" and user.approved_at is None:
+            user.approved_at = datetime.utcnow()
+        user.status = data.status
+    if data.permissions is not None:
+        user.permissions = data.permissions
+    db.commit()
+    db.refresh(user)
+    return _user_to_read(user)
+
+
+@app.delete("/api/users/{user_id}", status_code=204)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> None:
+    user = db.get(models.User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Você não pode se excluir.")
+    db.delete(user)
+    db.commit()
 
 
 # --------- Planos de saúde ---------

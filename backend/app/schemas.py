@@ -2,7 +2,52 @@ from datetime import date as date_type
 from datetime import datetime as datetime_type
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+
+UserRole = Literal["admin", "user"]
+UserStatus = Literal["pending", "active", "revoked"]
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    email: EmailStr
+    name: str
+    role: UserRole
+    status: UserStatus
+    permissions: list[str] | None = None
+    created_at: datetime_type
+    approved_at: datetime_type | None = None
+    has_password: bool = False
+
+
+class UserUpdate(BaseModel):
+    role: UserRole | None = None
+    status: UserStatus | None = None
+    permissions: list[str] | None = None
+
+
+class AuthRegister(BaseModel):
+    email: EmailStr
+    name: str
+    password: str = Field(min_length=6, max_length=128)
+
+
+class AuthLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class AuthGoogle(BaseModel):
+    id_token: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str | None = None
+    token_type: str = "bearer"
+    user: UserRead | None = None
+    pending: bool = False
 
 
 InvoiceStatus = Literal[

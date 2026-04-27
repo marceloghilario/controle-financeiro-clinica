@@ -1,9 +1,39 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+
+
+USER_ROLES = ("admin", "user")
+USER_STATUSES = ("pending", "active", "revoked")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_sub: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    permissions: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 INVOICE_STATUSES = (

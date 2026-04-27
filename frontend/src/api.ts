@@ -6,11 +6,46 @@ const DEFAULT_BASE =
 export const API_BASE: string =
   (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") || DEFAULT_BASE;
 
+const TOKEN_STORAGE_KEY = "clinica.auth.token";
+
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  unauthorizedHandler = fn;
+}
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    else localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((init?.headers as Record<string, string>) || {}),
+  };
+  const token = getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers,
   });
+  if (res.status === 401 || res.status === 403) {
+    // Token inválido/expirado/revogado: limpa e notifica
+    if (unauthorizedHandler) unauthorizedHandler();
+  }
   if (!res.ok) {
     let message = `Erro ${res.status}`;
     try {
@@ -31,7 +66,36 @@ export const api = {
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
+  patch: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   del: (path: string) => request<void>(path, { method: "DELETE" }),
+};
+
+export type UserRole = "admin" | "user";
+export type UserStatus = "pending" | "active" | "revoked";
+
+export type AppUser = {
+  id: number;
+  email: string;
+  name: string;
+  role: UserRole;
+  status: UserStatus;
+  permissions: string[] | null;
+  created_at: string;
+  approved_at: string | null;
+  has_password: boolean;
+};
+
+export type AuthResponse = {
+  access_token: string | null;
+  token_type: string;
+  user: AppUser | null;
+  pending: boolean;
+};
+
+export type AuthConfig = {
+  google_client_id: string;
+  google_enabled: boolean;
 };
 
 export type HealthPlan = {
