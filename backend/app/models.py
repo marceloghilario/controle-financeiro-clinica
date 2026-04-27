@@ -36,6 +36,7 @@ class Specialty(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=999, nullable=False)
 
     prices: Mapped[list["SpecialtyPrice"]] = relationship(
         back_populates="specialty", cascade="all, delete-orphan"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -54,6 +54,83 @@ def _migrate_sqlite() -> None:
         if receipts_cols and "linked_status" not in receipts_cols:
             conn.exec_driver_sql(
                 "ALTER TABLE receipts ADD COLUMN linked_status VARCHAR(20)"
+            )
+        spec_cols = {
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(specialties)").fetchall()
+        }
+        if spec_cols and "display_order" not in spec_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE specialties ADD COLUMN display_order INTEGER NOT NULL DEFAULT 999"
+            )
+            _seed_specialty_order(conn)
+
+
+_DEFAULT_SPECIALTY_ORDER = [
+    "psicologia aba",
+    "fonoaudiologia",
+    "fonoaudiologia pecs",
+    "terapia ocupacional - is",
+    "fisioterapia",
+    "pediasuit",
+    "psicomotricidade",
+    "nutricao",
+    "psicopedagogia",
+    "ed fisica esp",
+    "musicoterapia",
+]
+
+
+def _normalize_for_match(s: str) -> str:
+    import unicodedata
+
+    s = (s or "").strip().lower()
+    s = "".join(
+        c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn"
+    )
+    return " ".join(s.split())
+
+
+_DEFAULT_SPECIALTY_ALIASES: dict[str, str] = {
+    # mapeia variações comuns para um dos nomes da lista padrão
+    "educacao fisica": "ed fisica esp",
+    "educacao fisica especializada": "ed fisica esp",
+    "ed. fisica esp": "ed fisica esp",
+    "ed. fisica": "ed fisica esp",
+    "ed fisica": "ed fisica esp",
+    "fono pecs": "fonoaudiologia pecs",
+    "psico aba": "psicologia aba",
+    "to is": "terapia ocupacional - is",
+    "to - is": "terapia ocupacional - is",
+    "terapia ocupacional is": "terapia ocupacional - is",
+    "fisio": "fisioterapia",
+    "nutri": "nutricao",
+}
+
+
+def _match_default_order(name: str) -> int | None:
+    n = _normalize_for_match(name)
+    if n in _DEFAULT_SPECIALTY_ORDER:
+        return _DEFAULT_SPECIALTY_ORDER.index(n) + 1
+    if n in _DEFAULT_SPECIALTY_ALIASES:
+        canonical = _DEFAULT_SPECIALTY_ALIASES[n]
+        if canonical in _DEFAULT_SPECIALTY_ORDER:
+            return _DEFAULT_SPECIALTY_ORDER.index(canonical) + 1
+    return None
+
+
+def _seed_specialty_order(conn, only_unset: bool = False) -> None:
+    rows = conn.exec_driver_sql(
+        "SELECT id, name, display_order FROM specialties"
+    ).fetchall()
+    for sid, name, current_order in rows:
+        if only_unset and current_order != 999:
+            continue
+        order = _match_default_order(name)
+        if order is not None:
+            conn.exec_driver_sql(
+                "UPDATE specialties SET display_order = ? WHERE id = ?",
+                (order, sid),
             )
 
 
@@ -142,14 +219,46 @@ def delete_health_plan(health_plan_id: int, db: Session = Depends(get_db)) -> No
 
 @app.get("/api/specialties", response_model=list[schemas.SpecialtyRead])
 def list_specialties(db: Session = Depends(get_db)) -> list[models.Specialty]:
-    return list(db.scalars(select(models.Specialty).order_by(models.Specialty.name)))
+    return list(
+        db.scalars(
+            select(models.Specialty).order_by(
+                models.Specialty.display_order, models.Specialty.name
+            )
+        )
+    )
+
+
+@app.post("/api/specialties/reorder", response_model=list[schemas.SpecialtyRead])
+def reorder_specialties(
+    data: schemas.SpecialtyReorder, db: Session = Depends(get_db)
+) -> list[models.Specialty]:
+    for index, sid in enumerate(data.ids):
+        obj = db.get(models.Specialty, sid)
+        if obj is not None:
+            obj.display_order = index + 1
+    db.commit()
+    return list(
+        db.scalars(
+            select(models.Specialty).order_by(
+                models.Specialty.display_order, models.Specialty.name
+            )
+        )
+    )
 
 
 @app.post("/api/specialties", response_model=schemas.SpecialtyRead, status_code=201)
 def create_specialty(
     data: schemas.SpecialtyCreate, db: Session = Depends(get_db)
 ) -> models.Specialty:
-    obj = models.Specialty(name=data.name.strip())
+    name = data.name.strip()
+    matched_order: int | None = None
+    norm = _normalize_for_match(name)
+    if norm in _DEFAULT_SPECIALTY_ORDER:
+        matched_order = _DEFAULT_SPECIALTY_ORDER.index(norm) + 1
+    if matched_order is None:
+        max_order = db.scalar(select(func.max(models.Specialty.display_order))) or 0
+        matched_order = max(max_order + 1, len(_DEFAULT_SPECIALTY_ORDER) + 1)
+    obj = models.Specialty(name=name, display_order=matched_order)
     db.add(obj)
     try:
         db.commit()
@@ -176,6 +285,8 @@ def update_specialty(
         if not new_name:
             raise HTTPException(status_code=422, detail="Nome não pode ser vazio.")
         obj.name = new_name
+    if data.display_order is not None:
+        obj.display_order = data.display_order
     try:
         db.commit()
     except IntegrityError as e:

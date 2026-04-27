@@ -47,11 +47,17 @@ class SpecialtyCreate(SpecialtyBase):
 
 class SpecialtyUpdate(BaseModel):
     name: str | None = None
+    display_order: int | None = None
 
 
 class SpecialtyRead(SpecialtyBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    display_order: int = 999
+
+
+class SpecialtyReorder(BaseModel):
+    ids: list[int]
 
 
 class SpecialtyPriceBase(BaseModel):

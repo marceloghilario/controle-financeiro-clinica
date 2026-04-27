@@ -64,10 +64,29 @@ export default function SpecialtiesPage() {
     }
   }
 
+  async function move(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= items.length) return;
+    const reordered = [...items];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(target, 0, moved);
+    setItems(reordered);
+    try {
+      await api.post("/api/specialties/reorder", {
+        ids: reordered.map((s) => s.id),
+      });
+      setError(null);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+      await load();
+    }
+  }
+
   return (
     <Card
       title="Especialidades"
-      subtitle="Ex: Fisioterapia, Fonoaudiologia, Psicologia, Nutrição, Terapia Ocupacional"
+      subtitle="A ordem abaixo é a ordem de exibição nas demais telas (Preços, Plano semanal, Sessões, Notas)."
     >
       <form onSubmit={add} className="flex gap-2 mb-4">
         <Input
@@ -80,10 +99,13 @@ export default function SpecialtiesPage() {
       </form>
       {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
       <ul className="divide-y divide-slate-200">
-        {items.map((s) => (
+        {items.map((s, idx) => (
           <li key={s.id} className="flex items-center justify-between gap-2 py-2">
             {editingId === s.id ? (
               <>
+                <span className="w-6 text-xs text-slate-400 tabular-nums">
+                  {idx + 1}.
+                </span>
                 <Input
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
@@ -106,7 +128,28 @@ export default function SpecialtiesPage() {
               </>
             ) : (
               <>
+                <span className="w-6 text-xs text-slate-400 tabular-nums">
+                  {idx + 1}.
+                </span>
                 <span className="flex-1">{s.name}</span>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    onClick={() => move(idx, -1)}
+                    disabled={idx === 0}
+                    title="Mover para cima"
+                  >
+                    ↑
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => move(idx, 1)}
+                    disabled={idx === items.length - 1}
+                    title="Mover para baixo"
+                  >
+                    ↓
+                  </Button>
+                </div>
                 <Button variant="ghost" onClick={() => startEdit(s)}>
                   Editar
                 </Button>
@@ -122,9 +165,8 @@ export default function SpecialtiesPage() {
         )}
       </ul>
       <p className="mt-4 text-xs text-slate-500">
-        Ao renomear, o novo nome é refletido automaticamente em Preços, Plano semanal,
-        Sessões, Relatórios e Notas fiscais (os registros referenciam a especialidade
-        por ID).
+        Use ↑/↓ para reordenar. A ordem é aplicada automaticamente em Preços,
+        Plano semanal, Sessões, Relatórios e Notas fiscais.
       </p>
     </Card>
   );

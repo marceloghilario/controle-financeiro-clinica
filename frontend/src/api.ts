@@ -40,7 +40,7 @@ export type HealthPlan = {
   cnpj?: string | null;
   notes?: string | null;
 };
-export type Specialty = { id: number; name: string };
+export type Specialty = { id: number; name: string; display_order?: number };
 export type SpecialtyPrice = {
   id: number;
   specialty_id: number;

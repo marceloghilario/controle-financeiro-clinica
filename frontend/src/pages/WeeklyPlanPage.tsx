@@ -173,7 +173,13 @@ export default function WeeklyPlanPage() {
   }, [entries]);
 
   const sortedSpecialties = useMemo(
-    () => [...specialties].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    () =>
+      [...specialties].sort((a, b) => {
+        const ao = a.display_order ?? 999;
+        const bo = b.display_order ?? 999;
+        if (ao !== bo) return ao - bo;
+        return a.name.localeCompare(b.name, "pt-BR");
+      }),
     [specialties],
   );
 
