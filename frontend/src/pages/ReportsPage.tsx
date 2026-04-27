@@ -23,22 +23,20 @@ export function buildInvoiceText(report: PatientMonthReport): string {
   const billedItems = report.items.filter((i) => i.sessions_billed > 0);
   const lines: string[] = [];
   lines.push(
-    `Tratamento realizado pelo(a) paciente ${report.patient_name}` +
-      (report.patient_cpf ? `, CPF ${report.patient_cpf}` : ""),
+    `Sessão realizada pelo menor ${report.patient_name}` +
+      (report.patient_cpf ? ` - CPF: ${report.patient_cpf}` : ""),
   );
-  lines.push(`Código do beneficiário: ${report.patient_beneficiary || "—"}`);
-  lines.push(`Plano de saúde: ${report.health_plan_name}`);
-  lines.push("");
-  lines.push("Referente às sessões de:");
+  lines.push(`Beneficiário: ${report.patient_beneficiary || "—"}`);
   for (const i of billedItems) {
+    const sessoesLabel = i.sessions_billed === 1 ? "sessão" : "sessões";
     lines.push(
-      `- ${i.specialty_name}: ${i.sessions_billed} sessão(ões) × ${formatBRL(
+      `${i.specialty_name} ${i.sessions_billed} ${sessoesLabel} — Valor individual ${formatBRL(
         i.unit_value,
-      )} = ${formatBRL(i.total)}`,
+      )} - Valor total ${formatBRL(i.total)}`,
     );
   }
   lines.push(
-    `Sessões referentes ao mês ${MONTHS[report.month - 1]}/${report.year}.`,
+    `referente ao mês de ${MONTHS[report.month - 1]} de ${report.year}`,
   );
   lines.push("");
   lines.push(`Valor total: ${formatBRL(report.total)}`);
