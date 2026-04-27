@@ -89,8 +89,36 @@ def list_health_plans(db: Session = Depends(get_db)) -> list[models.HealthPlan]:
 def create_health_plan(
     data: schemas.HealthPlanCreate, db: Session = Depends(get_db)
 ) -> models.HealthPlan:
-    obj = models.HealthPlan(name=data.name.strip())
+    obj = models.HealthPlan(
+        name=data.name.strip(),
+        cnpj=(data.cnpj or "").strip() or None,
+        notes=(data.notes or "").strip() or None,
+    )
     db.add(obj)
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Já existe um plano com esse nome.") from e
+    db.refresh(obj)
+    return obj
+
+
+@app.put("/api/health-plans/{health_plan_id}", response_model=schemas.HealthPlanRead)
+def update_health_plan(
+    health_plan_id: int,
+    data: schemas.HealthPlanUpdate,
+    db: Session = Depends(get_db),
+) -> models.HealthPlan:
+    obj = db.get(models.HealthPlan, health_plan_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Plano não encontrado.")
+    if data.name is not None:
+        obj.name = data.name.strip()
+    if data.cnpj is not None:
+        obj.cnpj = data.cnpj.strip() or None
+    if data.notes is not None:
+        obj.notes = data.notes.strip() or None
     try:
         db.commit()
     except IntegrityError as e:
