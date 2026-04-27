@@ -75,6 +75,7 @@ def compute_patient_month(
     prices = {p.specialty_id: p.value for p in patient.health_plan.prices}
 
     items: list[schemas.SpecialtyReportItem] = []
+    item_order: dict[int, tuple[int, str]] = {}
     total = 0.0
     for specialty_id, planned_count in planned.items():
         absent = absences.get(specialty_id, 0)
@@ -83,6 +84,11 @@ def compute_patient_month(
         subtotal = billed_count * unit
         total += subtotal
         specialty = db.get(models.Specialty, specialty_id)
+        order_key = (
+            specialty.display_order if specialty is not None else 999,
+            specialty.name if specialty is not None else "?",
+        )
+        item_order[specialty_id] = order_key
         items.append(
             schemas.SpecialtyReportItem(
                 specialty_id=specialty_id,
@@ -94,23 +100,24 @@ def compute_patient_month(
                 total=round(subtotal, 2),
             )
         )
-    items.sort(key=lambda i: i.specialty_name)
+    items.sort(key=lambda i: item_order.get(i.specialty_id, (999, i.specialty_name)))
 
     absence_details: list[schemas.AbsenceDetail] = []
     for a in sorted(patient.absence_days, key=lambda a: a.date):
         if a.date.year != year or a.date.month != month:
             continue
         dow = a.date.weekday()
-        impacted = [
-            db.get(models.Specialty, sp_id).name
-            for sp_id, _ in by_weekday.get(dow, [])
-            if db.get(models.Specialty, sp_id) is not None
-        ]
+        impacted_specs: list[models.Specialty] = []
+        for sp_id, _ in by_weekday.get(dow, []):
+            sp = db.get(models.Specialty, sp_id)
+            if sp is not None:
+                impacted_specs.append(sp)
+        impacted_specs.sort(key=lambda s: (s.display_order, s.name))
         absence_details.append(
             schemas.AbsenceDetail(
                 date=a.date,
                 day_of_week=dow,
-                impacted_specialties=sorted(impacted),
+                impacted_specialties=[s.name for s in impacted_specs],
             )
         )
 

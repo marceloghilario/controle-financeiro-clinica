@@ -5,6 +5,7 @@ import {
   type Holiday,
   type Patient,
   type PatientMonthReport,
+  type Specialty,
   type WeeklyPlanEntry,
 } from "../api";
 import { Button, Card, Input, Label, Select } from "../components/Card";
@@ -30,6 +31,7 @@ export default function SessionsPage() {
   const [entries, setEntries] = useState<WeeklyPlanEntry[]>([]);
   const [absences, setAbsences] = useState<AbsenceDay[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [report, setReport] = useState<PatientMonthReport | null>(null);
 
   const [holidayDate, setHolidayDate] = useState("");
@@ -40,9 +42,14 @@ export default function SessionsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .get<Patient[]>("/api/patients")
-      .then(setPatients)
+    Promise.all([
+      api.get<Patient[]>("/api/patients"),
+      api.get<Specialty[]>("/api/specialties"),
+    ])
+      .then(([p, s]) => {
+        setPatients(p);
+        setSpecialties(s);
+      })
       .catch((e) => setError((e as Error).message));
   }, []);
 
@@ -105,16 +112,35 @@ export default function SessionsPage() {
   }, [patientId, year, month]);
 
   const planByWeekday = useMemo(() => {
-    const m: Record<number, string[]> = {};
+    const orderById = new Map<number, number>();
+    for (const s of specialties) {
+      orderById.set(s.id, s.display_order ?? 999);
+    }
+    const m: Record<number, { id: number; name: string }[]> = {};
+    const seen: Record<number, Set<number>> = {};
     for (const e of entries) {
-      if (!m[e.day_of_week]) m[e.day_of_week] = [];
-      if (e.specialty_name) m[e.day_of_week].push(e.specialty_name);
+      if (!m[e.day_of_week]) {
+        m[e.day_of_week] = [];
+        seen[e.day_of_week] = new Set();
+      }
+      if (e.specialty_name && !seen[e.day_of_week].has(e.specialty_id)) {
+        m[e.day_of_week].push({ id: e.specialty_id, name: e.specialty_name });
+        seen[e.day_of_week].add(e.specialty_id);
+      }
     }
+    const out: Record<number, string[]> = {};
     for (const k of Object.keys(m)) {
-      m[Number(k)] = Array.from(new Set(m[Number(k)])).sort();
+      const dow = Number(k);
+      const sorted = [...m[dow]].sort((a, b) => {
+        const ao = orderById.get(a.id) ?? 999;
+        const bo = orderById.get(b.id) ?? 999;
+        if (ao !== bo) return ao - bo;
+        return a.name.localeCompare(b.name, "pt-BR");
+      });
+      out[dow] = sorted.map((x) => x.name);
     }
-    return m;
-  }, [entries]);
+    return out;
+  }, [entries, specialties]);
 
   const absenceByDate = useMemo(() => {
     const m = new Map<string, AbsenceDay>();
