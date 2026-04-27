@@ -20,7 +20,19 @@ import {
   formatRatePercent,
 } from "../utils";
 
-export function buildInvoiceText(report: PatientMonthReport): string {
+export const PAYMENT_DETAILS_TEXT = [
+  "Dados para pagamento:",
+  "Banco ITAÚ (341)",
+  "AG: 1268",
+  "C.C: 98000-8",
+  "PRO AVANÇO SAÚDE E DESENVOLVIMENTO FÍSICO E COGNITIVO LTDA (PRÓ NUTRI)",
+  "CNPJ (PIX): 22.505.973/0001-15",
+].join("\n");
+
+export function buildInvoiceText(
+  report: PatientMonthReport,
+  options: { includePaymentDetails?: boolean } = {},
+): string {
   const billedItems = report.items.filter((i) => i.sessions_billed > 0);
   const lines: string[] = [];
   lines.push(
@@ -41,6 +53,10 @@ export function buildInvoiceText(report: PatientMonthReport): string {
   );
   lines.push("");
   lines.push(`Valor total: ${formatBRL(report.total)}`);
+  if (options.includePaymentDetails) {
+    lines.push("");
+    lines.push(PAYMENT_DETAILS_TEXT);
+  }
   return lines.join("\n");
 }
 
@@ -237,11 +253,13 @@ function GenerateInvoiceModal({
   open,
   onClose,
   onCreated,
+  includePaymentDetails = false,
 }: {
   report: PatientMonthReport;
   open: boolean;
   onClose: () => void;
   onCreated: (inv: Invoice) => void;
+  includePaymentDetails?: boolean;
 }) {
   const [number, setNumber] = useState("");
   const [issueDate, setIssueDate] = useState(todayIso());
@@ -277,7 +295,7 @@ function GenerateInvoiceModal({
         gross_value: report.total,
         net_value: bd.net,
         taxes: bd.total,
-        notes: buildInvoiceText(report),
+        notes: buildInvoiceText(report, { includePaymentDetails }),
         status: "em_aberto" as const,
       };
       const created = await api.post<Invoice>("/api/invoices", payload);
@@ -361,7 +379,29 @@ function GenerateInvoiceModal({
 }
 
 export function PatientReportCard({ report }: { report: PatientMonthReport }) {
-  const invoiceText = useMemo(() => buildInvoiceText(report), [report]);
+  const [includePaymentDetails, setIncludePaymentDetails] = useState<boolean>(
+    () => {
+      try {
+        return localStorage.getItem("invoiceText.includePaymentDetails") === "1";
+      } catch {
+        return false;
+      }
+    },
+  );
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "invoiceText.includePaymentDetails",
+        includePaymentDetails ? "1" : "0",
+      );
+    } catch {
+      // ignora se localStorage indisponível
+    }
+  }, [includePaymentDetails]);
+  const invoiceText = useMemo(
+    () => buildInvoiceText(report, { includePaymentDetails }),
+    [report, includePaymentDetails],
+  );
   const [copied, setCopied] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [genMessage, setGenMessage] = useState<string | null>(null);
@@ -479,6 +519,15 @@ export function PatientReportCard({ report }: { report: PatientMonthReport }) {
             </Button>
           </div>
         </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700 mb-2 select-none">
+          <input
+            type="checkbox"
+            checked={includePaymentDetails}
+            onChange={(e) => setIncludePaymentDetails(e.target.checked)}
+            className="rounded border-slate-300"
+          />
+          Incluir dados para pagamento (banco, agência, conta, PIX)
+        </label>
         {genMessage && (
           <div className="text-sm text-slate-600 mb-2">{genMessage}</div>
         )}
@@ -491,6 +540,7 @@ export function PatientReportCard({ report }: { report: PatientMonthReport }) {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onCreated={onCreated}
+        includePaymentDetails={includePaymentDetails}
       />
     </Card>
   );
