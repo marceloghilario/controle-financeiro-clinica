@@ -276,6 +276,7 @@ def _user_to_read(u: models.User) -> schemas.UserRead:
         role=u.role,
         status=u.status,
         permissions=u.permissions,
+        apps=user_apps(u.role, u.permissions),
         created_at=u.created_at,
         approved_at=u.approved_at,
         has_password=bool(u.password_hash),
