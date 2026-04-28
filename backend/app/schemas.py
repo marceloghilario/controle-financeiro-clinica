@@ -17,6 +17,7 @@ class UserRead(BaseModel):
     role: UserRole
     status: UserStatus
     permissions: list[str] | None = None
+    apps: list[str] = []
     created_at: datetime_type
     approved_at: datetime_type | None = None
     has_password: bool = False

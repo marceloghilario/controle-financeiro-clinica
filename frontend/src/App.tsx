@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import PatientsPage from "./pages/PatientsPage";
 import HealthPlansPage from "./pages/HealthPlansPage";
@@ -9,6 +9,7 @@ import InvoicesPage from "./pages/InvoicesPage";
 import ReceiptsPage from "./pages/ReceiptsPage";
 import LoginPage from "./pages/LoginPage";
 import UsersPage from "./pages/UsersPage";
+import PortalPage from "./pages/PortalPage";
 import { useAuth } from "./auth";
 import { Card } from "./components/Card";
 import ChangePasswordModal from "./components/ChangePasswordModal";
@@ -57,16 +58,23 @@ function App() {
   // Marca o aviso para silenciar o warning do TS sobre pendingUser não-utilizado em algumas builds
   void pendingUser;
 
+  const hasFinancial = user.apps.includes("financial");
+
   const links: { to: string; label: string; end?: boolean }[] = [
-    { to: "/", label: "Início", end: true },
-    { to: "/pacientes", label: "Pacientes" },
-    { to: "/plano-semanal", label: "Plano semanal" },
-    { to: "/sessao", label: "Sessão" },
-    { to: "/notas-fiscais", label: "Notas fiscais" },
-    { to: "/recebimentos", label: "Recebimentos" },
-    { to: "/planos-de-saude", label: "Planos de saúde" },
-    { to: "/especialidades", label: "Especialidades" },
+    { to: "/", label: "Portal", end: true },
   ];
+  if (hasFinancial) {
+    links.push(
+      { to: "/inicio", label: "Início" },
+      { to: "/pacientes", label: "Pacientes" },
+      { to: "/plano-semanal", label: "Plano semanal" },
+      { to: "/sessao", label: "Sessão" },
+      { to: "/notas-fiscais", label: "Notas fiscais" },
+      { to: "/recebimentos", label: "Recebimentos" },
+      { to: "/planos-de-saude", label: "Planos de saúde" },
+      { to: "/especialidades", label: "Especialidades" },
+    );
+  }
   if (user.role === "admin") {
     links.push({ to: "/usuarios", label: "Usuários" });
   }
@@ -112,6 +120,13 @@ function App() {
             </span>
             <button
               type="button"
+              onClick={() => setShowChangePw(true)}
+              className="text-slate-600 hover:text-slate-900 hover:underline"
+            >
+              Alterar senha
+            </button>
+            <button
+              type="button"
               onClick={logout}
               className="text-slate-600 hover:text-slate-900 hover:underline"
             >
@@ -122,26 +137,72 @@ function App() {
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6">
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/pacientes" element={<PatientsPage />} />
-          <Route path="/plano-semanal" element={<WeeklyPlanPage />} />
-          <Route path="/sessao" element={<SessionsPage />} />
-          <Route path="/faltas" element={<SessionsPage />} />
-          <Route path="/relatorios" element={<SessionsPage />} />
-          <Route path="/notas-fiscais" element={<InvoicesPage />} />
-          <Route path="/recebimentos" element={<ReceiptsPage />} />
-          <Route path="/planos-de-saude" element={<HealthPlansPage />} />
-          <Route path="/especialidades" element={<SpecialtiesPage />} />
-          <Route path="/precos" element={<HealthPlansPage />} />
+          <Route path="/" element={<PortalPage />} />
+          {hasFinancial ? (
+            <>
+              <Route path="/inicio" element={<HomePage />} />
+              <Route path="/pacientes" element={<PatientsPage />} />
+              <Route path="/plano-semanal" element={<WeeklyPlanPage />} />
+              <Route path="/sessao" element={<SessionsPage />} />
+              <Route path="/faltas" element={<SessionsPage />} />
+              <Route path="/relatorios" element={<SessionsPage />} />
+              <Route path="/notas-fiscais" element={<InvoicesPage />} />
+              <Route path="/recebimentos" element={<ReceiptsPage />} />
+              <Route path="/planos-de-saude" element={<HealthPlansPage />} />
+              <Route path="/especialidades" element={<SpecialtiesPage />} />
+              <Route path="/precos" element={<HealthPlansPage />} />
+            </>
+          ) : (
+            <Route path="/inicio" element={<NoFinancialAccess />} />
+          )}
           {user.role === "admin" && (
             <Route path="/usuarios" element={<UsersPage />} />
           )}
+          <Route path="*" element={<NotFound hasFinancial={hasFinancial} />} />
         </Routes>
       </main>
       {showChangePw && (
         <ChangePasswordModal user={user} onClose={() => setShowChangePw(false)} />
       )}
     </div>
+  );
+}
+
+function NoFinancialAccess() {
+  return (
+    <Card title="Sem acesso ao app financeiro">
+      <p className="text-sm text-slate-700">
+        Sua conta não tem permissão para acessar o app de controle financeiro.
+        Volte ao{" "}
+        <NavLink className="underline" to="/">
+          portal
+        </NavLink>{" "}
+        ou peça liberação a um administrador.
+      </p>
+    </Card>
+  );
+}
+
+function NotFound({ hasFinancial }: { hasFinancial: boolean }) {
+  const location = useLocation();
+  // Para usuários sem acesso ao financeiro, qualquer rota antiga cai no portal.
+  if (!hasFinancial) {
+    return <Navigate to="/" replace state={{ from: location.pathname }} />;
+  }
+  return (
+    <Card title="Página não encontrada">
+      <p className="text-sm text-slate-700">
+        A página{" "}
+        <code className="px-1 py-0.5 bg-slate-100 rounded">
+          {location.pathname}
+        </code>{" "}
+        não existe.{" "}
+        <NavLink className="underline" to="/">
+          Ir para o portal
+        </NavLink>
+        .
+      </p>
+    </Card>
   );
 }
 

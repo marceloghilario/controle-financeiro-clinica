@@ -74,6 +74,15 @@ export const api = {
 export type UserRole = "admin" | "user";
 export type UserStatus = "pending" | "active" | "revoked";
 
+export type AppKey = "financial" | "patient";
+
+export const APP_KEYS: AppKey[] = ["financial", "patient"];
+
+export const APP_LABELS: Record<AppKey, string> = {
+  financial: "Controle financeiro",
+  patient: "Cadastro de pacientes",
+};
+
 export type AppUser = {
   id: number;
   email: string;
@@ -81,6 +90,7 @@ export type AppUser = {
   role: UserRole;
   status: UserStatus;
   permissions: string[] | null;
+  apps: AppKey[];
   created_at: string;
   approved_at: string | null;
   has_password: boolean;

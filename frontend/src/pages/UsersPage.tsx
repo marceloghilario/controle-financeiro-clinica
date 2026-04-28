@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { api, type AppUser, type UserRole, type UserStatus } from "../api";
+import {
+  api,
+  APP_KEYS,
+  APP_LABELS,
+  type AppKey,
+  type AppUser,
+  type UserRole,
+  type UserStatus,
+} from "../api";
 import { Button, Card, Select } from "../components/Card";
 import { useAuth } from "../auth";
 
@@ -40,7 +48,7 @@ export default function UsersPage() {
 
   async function update(
     id: number,
-    patch: { role?: UserRole; status?: UserStatus },
+    patch: { role?: UserRole; status?: UserStatus; permissions?: string[] },
   ) {
     setBusyId(id);
     try {
@@ -52,6 +60,17 @@ export default function UsersPage() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  function toggleApp(u: AppUser, app: AppKey, enabled: boolean) {
+    // Lista atual a partir do que o backend já retorna (apps respeitando role).
+    // Para admin não faz sentido editar (sempre tem todos), mas mantemos o input desabilitado.
+    const current = new Set<AppKey>(
+      (u.permissions ?? (APP_KEYS as AppKey[])) as AppKey[],
+    );
+    if (enabled) current.add(app);
+    else current.delete(app);
+    update(u.id, { permissions: APP_KEYS.filter((k) => current.has(k)) });
   }
 
   async function remove(id: number) {
@@ -113,6 +132,36 @@ export default function UsersPage() {
           <option value="user">Usuário</option>
           <option value="admin">Administrador</option>
         </Select>
+        <div className="flex flex-col gap-1 text-xs text-slate-700 min-w-[10rem]">
+          <span className="text-[11px] uppercase tracking-wide text-slate-500">
+            Acessos
+          </span>
+          {APP_KEYS.map((app) => {
+            const has = u.apps.includes(app);
+            return (
+              <label
+                key={app}
+                className={`inline-flex items-center gap-1.5 ${
+                  u.role === "admin" ? "text-slate-500" : ""
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5"
+                  checked={has}
+                  disabled={busyId === u.id || u.role === "admin"}
+                  onChange={(e) => toggleApp(u, app, e.target.checked)}
+                />
+                {APP_LABELS[app]}
+              </label>
+            );
+          })}
+          {u.role === "admin" && (
+            <span className="text-[11px] text-slate-400">
+              Admin acessa tudo.
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           {u.status !== "active" && (
             <Button

@@ -17,6 +17,25 @@ from .database import get_db
 
 SEED_ADMIN_EMAIL = "marceloghilario@gmail.com"
 
+# Apps disponíveis no portal — usados também pelo campo permissions.
+APP_KEYS = ("financial", "patient")
+
+
+def user_apps(role: str | None, permissions: list[str] | None) -> list[str]:
+    """Lista de apps que o usuário pode acessar.
+
+    Regras:
+    - admin: sempre todos os apps
+    - permissions = None (legado): também todos os apps (compat com contas antigas)
+    - permissions = lista: apenas os apps presentes
+    """
+    if role == "admin":
+        return list(APP_KEYS)
+    if permissions is None:
+        return list(APP_KEYS)
+    return [a for a in APP_KEYS if a in permissions]
+
+
 JWT_SECRET = os.environ.get("AUTH_SECRET_KEY") or "dev-secret-please-change-in-production"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = 24 * 30  # 30 dias

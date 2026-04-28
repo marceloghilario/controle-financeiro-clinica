@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from . import auth as auth_mod
 from . import billing, models, schemas
 from .auth import (
+    APP_KEYS,
     SEED_ADMIN_EMAIL,
     create_access_token,
     decode_access_token,
@@ -19,6 +20,7 @@ from .auth import (
     hash_password,
     is_seed_admin,
     require_admin,
+    user_apps,
     verify_google_id_token,
     verify_password,
 )
@@ -243,6 +245,16 @@ async def auth_middleware(request: Request, call_next):
                 status_code=403,
                 content={"detail": "Acesso pendente ou revogado."},
             )
+        # /api/users é gerenciado por require_admin no próprio endpoint.
+        # Para os demais endpoints do app financeiro, exige permissão "financial".
+        if not path.startswith("/api/users"):
+            if "financial" not in user_apps(user.role, user.permissions):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": "Você não tem permissão para acessar o app financeiro."
+                    },
+                )
     finally:
         db.close()
     return await call_next(request)
@@ -452,7 +464,14 @@ def update_user(
             user.approved_at = datetime.utcnow()
         user.status = data.status
     if data.permissions is not None:
-        user.permissions = data.permissions
+        invalid = [p for p in data.permissions if p not in APP_KEYS]
+        if invalid:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Permissões inválidas: {', '.join(invalid)}",
+            )
+        # Mantém a lista normalizada/única e na ordem canônica.
+        user.permissions = [a for a in APP_KEYS if a in data.permissions]
     db.commit()
     db.refresh(user)
     return _user_to_read(user)
@@ -1491,5 +1510,8 @@ def delete_receipt(receipt_id: int, db: Session = Depends(get_db)) -> None:
     db.flush()
     for inv_id in invoice_ids:
         _refresh_invoice_status(db, inv_id)
+    db.commit()
+
+
     db.commit()
 
