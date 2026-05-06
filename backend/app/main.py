@@ -734,6 +734,7 @@ def _patient_read(p: models.Patient) -> schemas.PatientRead:
         beneficiary=p.beneficiary,
         health_plan_id=p.health_plan_id,
         active=p.active,
+        includes_saturday=getattr(p, "includes_saturday", 0) or 0,
         health_plan_name=p.health_plan.name if p.health_plan else None,
     )
 
@@ -762,6 +763,7 @@ def create_patient(
         beneficiary=(data.beneficiary.strip() if data.beneficiary else None) or None,
         health_plan_id=data.health_plan_id,
         active=data.active,
+        includes_saturday=1 if data.includes_saturday else 0,
     )
     db.add(obj)
     db.commit()
@@ -790,6 +792,8 @@ def update_patient(
         obj.health_plan_id = data.health_plan_id
     if data.active is not None:
         obj.active = data.active
+    if data.includes_saturday is not None:
+        obj.includes_saturday = 1 if data.includes_saturday else 0
     db.commit()
     db.refresh(obj)
     return _patient_read(obj)

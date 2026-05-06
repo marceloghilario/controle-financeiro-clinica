@@ -73,7 +73,7 @@ export default function WeeklyPlanPage() {
     const prev = includesSaturday;
     setIncludesSaturday(next);
     try {
-      const updated = await api.patch<Patient>(
+      const updated = await api.put<Patient>(
         `/api/patients/${patientId}`,
         { includes_saturday: next ? 1 : 0 },
       );
