@@ -17,18 +17,22 @@ def _holiday_dates_for_month(db: Session, year: int, month: int) -> set[date]:
 
 
 def business_days_by_weekday(
-    year: int, month: int, holiday_dates: set[date] | None = None
+    year: int,
+    month: int,
+    holiday_dates: set[date] | None = None,
+    include_saturday: bool = False,
 ) -> dict[int, int]:
-    """Retorna {dia_da_semana: quantidade_no_mes} contando dias úteis (seg–sex),
-    excluindo feriados informados.
+    """Retorna {dia_da_semana: quantidade_no_mes} contando dias úteis (seg–sex,
+    opcionalmente incluindo sábado), excluindo feriados informados.
     """
     holiday_dates = holiday_dates or set()
     _, last_day = calendar.monthrange(year, month)
     counts: dict[int, int] = {i: 0 for i in range(7)}
+    last_dow = 5 if include_saturday else 4
     for day in range(1, last_day + 1):
         d = date(year, month, day)
         dow = calendar.weekday(year, month, day)
-        if dow < 5 and d not in holiday_dates:  # seg–sex e não feriado
+        if dow <= last_dow and d not in holiday_dates:
             counts[dow] += 1
     return counts
 
@@ -37,14 +41,16 @@ def compute_patient_month(
     db: Session, patient: models.Patient, year: int, month: int
 ) -> schemas.PatientMonthReport:
     """Calcula o faturamento do paciente no mês, descontando feriados globais."""
+    include_saturday = bool(getattr(patient, "includes_saturday", 0))
+    last_dow = 5 if include_saturday else 4
     holiday_dates = _holiday_dates_for_month(db, year, month)
-    bdays = business_days_by_weekday(year, month, holiday_dates)
+    bdays = business_days_by_weekday(year, month, holiday_dates, include_saturday)
     _, last_day = calendar.monthrange(year, month)
 
     # dia_da_semana -> lista de (specialty_id, sessions)
     by_weekday: dict[int, list[tuple[int, int]]] = {i: [] for i in range(7)}
     for entry in patient.weekly_entries:
-        if entry.day_of_week < 5:
+        if entry.day_of_week <= last_dow:
             by_weekday[entry.day_of_week].append((entry.specialty_id, entry.sessions))
 
     absence_dates: set[date] = {
@@ -57,7 +63,7 @@ def compute_patient_month(
 
     for day in range(1, last_day + 1):
         dow = calendar.weekday(year, month, day)
-        if dow >= 5:
+        if dow > last_dow:
             continue
         d = date(year, month, day)
         if d in holiday_dates:

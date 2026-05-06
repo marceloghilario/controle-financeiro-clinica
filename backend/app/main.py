@@ -44,6 +44,10 @@ def _migrate_sqlite() -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE patients ADD COLUMN beneficiary VARCHAR(200)"
             )
+        if "includes_saturday" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE patients ADD COLUMN includes_saturday INTEGER NOT NULL DEFAULT 0"
+            )
         price_cols = {
             row[1]
             for row in conn.exec_driver_sql(

@@ -138,6 +138,7 @@ class PatientBase(BaseModel):
     beneficiary: str | None = None
     health_plan_id: int
     active: int = 1
+    includes_saturday: int = 0
 
 
 class PatientCreate(PatientBase):
@@ -150,6 +151,7 @@ class PatientUpdate(BaseModel):
     beneficiary: str | None = None
     health_plan_id: int | None = None
     active: int | None = None
+    includes_saturday: int | None = None
 
 
 class PatientRead(PatientBase):

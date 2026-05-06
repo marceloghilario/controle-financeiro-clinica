@@ -132,6 +132,7 @@ export type Patient = {
   health_plan_id: number;
   health_plan_name?: string | null;
   active: number;
+  includes_saturday?: number;
 };
 export type WeeklyPlanEntry = {
   id: number;

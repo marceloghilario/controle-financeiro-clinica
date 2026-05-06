@@ -128,7 +128,8 @@ export default function InvoicesPage() {
   const years = useMemo(() => {
     const current = new Date().getFullYear();
     const list: number[] = [];
-    for (let y = current - 2; y <= current + 2; y++) list.push(y);
+    const end = Math.max(current + 2, 2026);
+    for (let y = 2022; y <= end; y++) list.push(y);
     return list;
   }, []);
 

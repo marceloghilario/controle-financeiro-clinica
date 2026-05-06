@@ -95,22 +95,29 @@ export default function AbsencesPage() {
     }
   }
 
-  // Gera lista de dias do mês (seg–sex)
+  const selectedPatient = useMemo(
+    () => patients.find((p) => p.id === patientId),
+    [patients, patientId],
+  );
+  const includesSaturday = !!selectedPatient?.includes_saturday;
+
+  // Gera lista de dias do mês (seg–sex, ou seg–sáb se o paciente atende sábado)
   const businessDays = useMemo(() => {
     if (patientId === "") return [];
     const total = daysInMonth(year, month);
     const out: { day: number; dow: number; dateStr: string }[] = [];
+    const lastDow = includesSaturday ? 5 : 4;
     for (let d = 1; d <= total; d++) {
       const js = new Date(year, month - 1, d);
       // JS: 0=Dom, 1=Seg...6=Sáb. Convert to 0=Seg..6=Dom
       const jsDow = js.getDay();
       const dow = (jsDow + 6) % 7;
-      if (dow < 5) {
+      if (dow <= lastDow) {
         out.push({ day: d, dow, dateStr: `${year}-${pad2(month)}-${pad2(d)}` });
       }
     }
     return out;
-  }, [patientId, year, month]);
+  }, [patientId, year, month, includesSaturday]);
 
   return (
     <Card

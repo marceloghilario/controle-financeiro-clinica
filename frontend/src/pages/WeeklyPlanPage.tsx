@@ -22,6 +22,7 @@ export default function WeeklyPlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [includesSaturday, setIncludesSaturday] = useState<boolean>(false);
 
   // Matriz (specialty_id × day_of_week) -> sessões. Editado localmente até clicar em "Salvar".
   const [matrix, setMatrix] = useState<Record<CellKey, number>>({});
@@ -55,12 +56,46 @@ export default function WeeklyPlanPage() {
     if (patientId === "") {
       setEntries([]);
       setMatrix({});
+      setIncludesSaturday(false);
       return;
     }
+    const p = patients.find((x) => x.id === Number(patientId));
+    setIncludesSaturday(!!p?.includes_saturday);
     loadEntries(Number(patientId)).catch((e) =>
       setError((e as Error).message),
     );
-  }, [patientId]);
+  }, [patientId, patients]);
+
+  const dowCount = includesSaturday ? 6 : 5;
+
+  async function toggleSaturday(next: boolean) {
+    if (patientId === "") return;
+    const prev = includesSaturday;
+    setIncludesSaturday(next);
+    try {
+      const updated = await api.patch<Patient>(
+        `/api/patients/${patientId}`,
+        { includes_saturday: next ? 1 : 0 },
+      );
+      setPatients((list) =>
+        list.map((x) => (x.id === updated.id ? updated : x)),
+      );
+      if (!next) {
+        // se desligou sábado, remove células de sábado da matriz local
+        setMatrix((m) => {
+          const out: Record<CellKey, number> = {};
+          for (const k of Object.keys(m)) {
+            const dow = Number(k.split("-")[1]);
+            if (dow !== 5) out[k] = m[k];
+          }
+          return out;
+        });
+      }
+    } catch (e) {
+      setIncludesSaturday(prev);
+      setError((e as Error).message);
+    }
+  }
 
   const originalMatrix = useMemo(() => {
     const m: Record<CellKey, { id: number; sessions: number }> = {};
@@ -97,7 +132,7 @@ export default function WeeklyPlanPage() {
   function fillRow(specialtyId: number, value: number) {
     setMatrix((prev) => {
       const next = { ...prev };
-      for (let dow = 0; dow < 5; dow++) {
+      for (let dow = 0; dow < dowCount; dow++) {
         const k = key(specialtyId, dow);
         if (value === 0) delete next[k];
         else next[k] = value;
@@ -185,7 +220,7 @@ export default function WeeklyPlanPage() {
 
   const dayTotals = useMemo(() => {
     const t: Record<number, number> = {};
-    for (let d = 0; d < 5; d++) {
+    for (let d = 0; d < dowCount; d++) {
       let sum = 0;
       for (const sp of sortedSpecialties) {
         sum += matrix[key(sp.id, d)] ?? 0;
@@ -193,11 +228,11 @@ export default function WeeklyPlanPage() {
       t[d] = sum;
     }
     return t;
-  }, [matrix, sortedSpecialties]);
+  }, [matrix, sortedSpecialties, dowCount]);
 
   const rowTotal = (specialtyId: number) => {
     let s = 0;
-    for (let d = 0; d < 5; d++) s += matrix[key(specialtyId, d)] ?? 0;
+    for (let d = 0; d < dowCount; d++) s += matrix[key(specialtyId, d)] ?? 0;
     return s;
   };
 
@@ -224,6 +259,23 @@ export default function WeeklyPlanPage() {
               ))}
             </Select>
           </div>
+          {patientId !== "" && (
+            <div className="flex items-center gap-2">
+              <input
+                id="includes-saturday"
+                type="checkbox"
+                checked={includesSaturday}
+                onChange={(e) => toggleSaturday(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <label
+                htmlFor="includes-saturday"
+                className="text-sm text-slate-700 select-none"
+              >
+                Atende aos sábados (semana seg–sáb)
+              </label>
+            </div>
+          )}
         </div>
 
         {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
@@ -241,7 +293,7 @@ export default function WeeklyPlanPage() {
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="text-left px-3 py-2 w-56">Especialidade</th>
-                        {WEEKDAYS.slice(0, 5).map((w, i) => (
+                        {WEEKDAYS.slice(0, dowCount).map((w, i) => (
                           <th
                             key={i}
                             className="px-2 py-2 text-center w-24 whitespace-nowrap"
@@ -259,7 +311,7 @@ export default function WeeklyPlanPage() {
                         return (
                           <tr key={sp.id}>
                             <td className="px-3 py-1.5 font-medium">{sp.name}</td>
-                            {Array.from({ length: 5 }).map((_, dow) => {
+                            {Array.from({ length: dowCount }).map((_, dow) => {
                               const v = matrix[key(sp.id, dow)] ?? 0;
                               return (
                                 <td key={dow} className="px-1 py-1 text-center">
@@ -292,7 +344,9 @@ export default function WeeklyPlanPage() {
                                     type="button"
                                     onClick={() => fillRow(sp.id, n)}
                                     className="text-xs rounded border border-slate-300 bg-white px-1.5 py-0.5 hover:bg-slate-100"
-                                    title={`Preencher seg–sex com ${n}`}
+                                    title={`Preencher ${
+                                      includesSaturday ? "seg–sáb" : "seg–sex"
+                                    } com ${n}`}
                                   >
                                     {n}/dia
                                   </button>
@@ -316,7 +370,7 @@ export default function WeeklyPlanPage() {
                     <tfoot>
                       <tr className="bg-slate-50">
                         <td className="px-3 py-2 font-semibold">Total / dia</td>
-                        {Array.from({ length: 5 }).map((_, dow) => (
+                        {Array.from({ length: dowCount }).map((_, dow) => (
                           <td
                             key={dow}
                             className="px-2 py-2 text-center font-semibold"
@@ -361,8 +415,12 @@ export default function WeeklyPlanPage() {
                   <div className="text-sm font-medium text-slate-700 mb-2">
                     Visualização do plano salvo (por dia da semana)
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                    {WEEKDAYS.slice(0, 5).map((w, i) => (
+                  <div
+                    className={`grid grid-cols-1 gap-3 ${
+                      includesSaturday ? "md:grid-cols-6" : "md:grid-cols-5"
+                    }`}
+                  >
+                    {WEEKDAYS.slice(0, dowCount).map((w, i) => (
                       <div
                         key={i}
                         className="border border-slate-200 rounded-md p-3 bg-slate-50 min-h-24"

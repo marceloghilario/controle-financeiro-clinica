@@ -101,6 +101,7 @@ class Patient(Base):
     beneficiary: Mapped[str | None] = mapped_column(String(200), nullable=True)
     health_plan_id: Mapped[int] = mapped_column(ForeignKey("health_plans.id"), nullable=False)
     active: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    includes_saturday: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     health_plan: Mapped[HealthPlan] = relationship(back_populates="patients")
     weekly_entries: Mapped[list["WeeklyPlanEntry"]] = relationship(
