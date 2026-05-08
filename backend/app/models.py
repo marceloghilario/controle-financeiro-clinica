@@ -197,6 +197,21 @@ class Invoice(Base):
         back_populates="invoice", cascade="all, delete-orphan"
     )
 
+    @property
+    def payment_date(self) -> date | None:
+        """Data do recebimento mais recente vinculado a esta nota.
+
+        Retorna None se a nota ainda não tem nenhum recebimento vinculado.
+        """
+        dates: list[date] = [
+            link.receipt.payment_date
+            for link in self.receipt_links
+            if link.receipt is not None and link.receipt.payment_date is not None
+        ]
+        if not dates:
+            return None
+        return max(dates)
+
 
 RECEIPT_PAYER_TYPES = ("health_plan", "patient", "other")
 

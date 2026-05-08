@@ -216,9 +216,14 @@ export type Invoice = {
   notes: string | null;
   status: InvoiceStatus;
   created_at: string;
+  /**
+   * Data do recebimento mais recente vinculado a esta nota (YYYY-MM-DD) ou
+   * null caso a nota ainda esteja em aberto sem recebimento associado.
+   */
+  payment_date: string | null;
 };
 
-export type InvoiceInput = Omit<Invoice, "id" | "created_at">;
+export type InvoiceInput = Omit<Invoice, "id" | "created_at" | "payment_date">;
 
 export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   em_aberto: "Em aberto",

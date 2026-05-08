@@ -91,6 +91,34 @@ function formatIsoDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
+function parseIsoToDate(iso: string): Date | null {
+  if (!iso) return null;
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+function todayDate(): Date {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/**
+ * Dias corridos entre a emissão e o pagamento (ou "hoje" caso ainda em aberto).
+ * Retorna null para notas canceladas (não faz sentido contar dias) ou quando a
+ * data de emissão é inválida.
+ */
+function daysOpen(inv: Invoice): number | null {
+  if (inv.status === "cancelada") return null;
+  const issue = parseIsoToDate(inv.issue_date);
+  if (!issue) return null;
+  const end = inv.payment_date ? parseIsoToDate(inv.payment_date) : todayDate();
+  if (!end) return null;
+  const ms = end.getTime() - issue.getTime();
+  const days = Math.round(ms / (24 * 60 * 60 * 1000));
+  return days < 0 ? 0 : days;
+}
+
 export default function InvoicesPage() {
   const [items, setItems] = useState<Invoice[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -834,6 +862,7 @@ function InvoiceViewModal({
 }
 
 function InvoiceDetailGrid({ invoice }: { invoice: Invoice }) {
+  const days = daysOpen(invoice);
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
       <DetailItem label="Número" value={invoice.number || "—"} />
@@ -845,6 +874,14 @@ function InvoiceDetailGrid({ invoice }: { invoice: Invoice }) {
       />
       <DetailItem label="Plano de saúde" value={invoice.health_plan_name || "—"} />
       <DetailItem label="Status" value={INVOICE_STATUS_LABELS[invoice.status]} />
+      <DetailItem
+        label="Data de pagamento"
+        value={invoice.payment_date ? formatIsoDate(invoice.payment_date) : "—"}
+      />
+      <DetailItem
+        label="Dias em aberto"
+        value={days === null ? "—" : `${days} dia${days === 1 ? "" : "s"}`}
+      />
       <DetailItem label="Valor bruto" value={formatBRL(invoice.gross_value)} />
       <DetailItem label="Impostos" value={formatBRL(invoice.taxes)} />
       <DetailItem
@@ -957,6 +994,8 @@ function InvoiceListPrintFrame({
                 <th className="text-left px-2 py-1">Nº</th>
                 <th className="text-left px-2 py-1">Tomador</th>
                 <th className="text-left px-2 py-1">Emissão</th>
+                <th className="text-left px-2 py-1">Pagamento</th>
+                <th className="text-right px-2 py-1">Dias em aberto</th>
                 <th className="text-left px-2 py-1">Paciente</th>
                 <th className="text-left px-2 py-1">Referente</th>
                 <th className="text-right px-2 py-1">Bruto</th>
@@ -965,32 +1004,44 @@ function InvoiceListPrintFrame({
               </tr>
             </thead>
             <tbody>
-              {invoices.map((inv) => (
-                <tr key={inv.id} className="border-b border-slate-200 align-top">
-                  <td className="px-2 py-1">{inv.number || "—"}</td>
-                  <td className="px-2 py-1">{inv.health_plan_name || "—"}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">
-                    {formatIsoDate(inv.issue_date)}
-                  </td>
-                  <td className="px-2 py-1">{inv.patient_name}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">
-                    {MONTHS[inv.reference_month - 1]}/{inv.reference_year}
-                  </td>
-                  <td className="px-2 py-1 text-right whitespace-nowrap">
-                    {formatBRL(inv.gross_value)}
-                  </td>
-                  <td className="px-2 py-1 text-right whitespace-nowrap">
-                    {formatBRL(inv.net_value)}
-                  </td>
-                  <td className="px-2 py-1">
-                    {INVOICE_STATUS_LABELS[inv.status]}
-                  </td>
-                </tr>
-              ))}
+              {invoices.map((inv) => {
+                const days = daysOpen(inv);
+                return (
+                  <tr
+                    key={inv.id}
+                    className="border-b border-slate-200 align-top"
+                  >
+                    <td className="px-2 py-1">{inv.number || "—"}</td>
+                    <td className="px-2 py-1">{inv.health_plan_name || "—"}</td>
+                    <td className="px-2 py-1 whitespace-nowrap">
+                      {formatIsoDate(inv.issue_date)}
+                    </td>
+                    <td className="px-2 py-1 whitespace-nowrap">
+                      {inv.payment_date ? formatIsoDate(inv.payment_date) : "—"}
+                    </td>
+                    <td className="px-2 py-1 text-right whitespace-nowrap">
+                      {days === null ? "—" : days}
+                    </td>
+                    <td className="px-2 py-1">{inv.patient_name}</td>
+                    <td className="px-2 py-1 whitespace-nowrap">
+                      {MONTHS[inv.reference_month - 1]}/{inv.reference_year}
+                    </td>
+                    <td className="px-2 py-1 text-right whitespace-nowrap">
+                      {formatBRL(inv.gross_value)}
+                    </td>
+                    <td className="px-2 py-1 text-right whitespace-nowrap">
+                      {formatBRL(inv.net_value)}
+                    </td>
+                    <td className="px-2 py-1">
+                      {INVOICE_STATUS_LABELS[inv.status]}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-400 font-semibold">
-                <td className="px-2 py-1" colSpan={5}>
+                <td className="px-2 py-1" colSpan={7}>
                   Totais ({invoices.length} nota{invoices.length === 1 ? "" : "s"})
                 </td>
                 <td className="px-2 py-1 text-right whitespace-nowrap">

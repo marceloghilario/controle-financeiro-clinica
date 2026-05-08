@@ -293,6 +293,7 @@ class InvoiceRead(InvoiceBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     created_at: datetime_type
+    payment_date: date_type | None = None
 
 
 PayerType = Literal["health_plan", "patient", "other"]
