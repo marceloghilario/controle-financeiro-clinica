@@ -101,6 +101,7 @@ export default function ReceiptsPage() {
   const [filterPayer, setFilterPayer] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
+  const [printing, setPrinting] = useState(false);
 
   async function loadReceipts() {
     try {
@@ -801,7 +802,23 @@ export default function ReceiptsPage() {
         </div>
       </Card>
 
-      <Card title="Recebimentos cadastrados">
+      <Card
+        title="Recebimentos cadastrados"
+        subtitle={
+          filterPayer || filterStartDate || filterEndDate
+            ? `${filteredReceipts.length} de ${receipts.length} recebimento(s) (filtros ativos)`
+            : `${receipts.length} recebimento(s) registrado(s)`
+        }
+        actions={
+          <Button
+            variant="secondary"
+            onClick={() => setPrinting(true)}
+            disabled={filteredReceipts.length === 0}
+          >
+            Imprimir lista
+          </Button>
+        }
+      >
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
           <div>
             <Label>Pagador</Label>
@@ -914,6 +931,145 @@ export default function ReceiptsPage() {
           </div>
         )}
       </Card>
+      <ReceiptListPrintFrame
+        active={printing}
+        receipts={filteredReceipts}
+        filters={{
+          payer: filterPayer,
+          startDate: filterStartDate,
+          endDate: filterEndDate,
+        }}
+        onDone={() => setPrinting(false)}
+      />
+    </div>
+  );
+}
+
+type ReceiptListPrintFilters = {
+  payer: string;
+  startDate: string;
+  endDate: string;
+};
+
+function ReceiptListPrintFrame({
+  active,
+  receipts,
+  filters,
+  onDone,
+}: {
+  active: boolean;
+  receipts: Receipt[];
+  filters: ReceiptListPrintFilters;
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    if (!active) return;
+    const timer = setTimeout(() => {
+      window.print();
+    }, 100);
+    function afterPrint() {
+      onDone();
+    }
+    window.addEventListener("afterprint", afterPrint);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("afterprint", afterPrint);
+    };
+  }, [active, onDone]);
+
+  if (!active) return null;
+
+  const total = receipts.reduce((s, r) => s + r.value, 0);
+
+  const activeFilters: string[] = [];
+  if (filters.payer) activeFilters.push(`Pagador: ${filters.payer}`);
+  if (filters.startDate)
+    activeFilters.push(`De: ${formatIsoDate(filters.startDate)}`);
+  if (filters.endDate)
+    activeFilters.push(`Até: ${formatIsoDate(filters.endDate)}`);
+
+  return (
+    <div className="invoice-print-area">
+      <div className="p-6 text-slate-900">
+        <div className="border-b border-slate-300 pb-2 mb-3">
+          <h1 className="text-lg font-bold">Relação de recebimentos</h1>
+          <div className="text-xs text-slate-600 mt-1">
+            {activeFilters.length > 0
+              ? `Filtros: ${activeFilters.join(" · ")}`
+              : "Sem filtros aplicados (todos os recebimentos)"}
+          </div>
+          <div className="text-xs text-slate-600">
+            Gerado em {new Date().toLocaleString("pt-BR")} · {receipts.length}{" "}
+            recebimento(s)
+          </div>
+        </div>
+
+        {receipts.length === 0 ? (
+          <div className="text-sm text-slate-600 py-4">
+            Nenhum recebimento corresponde aos filtros.
+          </div>
+        ) : (
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-400">
+                <th className="text-left px-2 py-1">Data</th>
+                <th className="text-left px-2 py-1">Pagador</th>
+                <th className="text-left px-2 py-1">Tipo</th>
+                <th className="text-right px-2 py-1">Valor</th>
+                <th className="text-left px-2 py-1">Notas vinculadas</th>
+                <th className="text-left px-2 py-1">Observações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receipts.map((r) => (
+                <tr
+                  key={r.id}
+                  className="border-b border-slate-200 align-top"
+                >
+                  <td className="px-2 py-1 whitespace-nowrap">
+                    {formatIsoDate(r.payment_date)}
+                  </td>
+                  <td className="px-2 py-1">{r.payer_name}</td>
+                  <td className="px-2 py-1 whitespace-nowrap">
+                    {PAYER_LABELS[r.payer_type]}
+                  </td>
+                  <td className="px-2 py-1 text-right whitespace-nowrap">
+                    {formatBRL(r.value)}
+                  </td>
+                  <td className="px-2 py-1">
+                    {r.invoices.length === 0 ? (
+                      <span className="text-slate-500">Sem vínculo</span>
+                    ) : (
+                      <ul className="space-y-0.5">
+                        {r.invoices.map((i) => (
+                          <li key={i.id}>
+                            Nº {i.number || "—"} · {i.patient_name} ·{" "}
+                            {MONTHS[i.reference_month - 1]}/{i.reference_year} ·{" "}
+                            {formatBRL(i.net_value)} (líq)
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                  <td className="px-2 py-1">{r.notes || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-400 font-semibold">
+                <td className="px-2 py-1" colSpan={3}>
+                  Totais ({receipts.length} recebimento
+                  {receipts.length === 1 ? "" : "s"})
+                </td>
+                <td className="px-2 py-1 text-right whitespace-nowrap">
+                  {formatBRL(total)}
+                </td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
