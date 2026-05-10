@@ -119,17 +119,13 @@ export default function ReceiptsPage() {
   // dispara busca de sugestões quando muda pagador ou valor
   useEffect(() => {
     const value = parseBRL(form.value);
-    const hasPayer =
+    const hasFilter =
       (form.payer_type === "health_plan" && form.payer_health_plan_id !== "") ||
       (form.payer_type === "patient" && form.payer_patient_id !== "") ||
-      (form.payer_type === "other" && form.payer_name.trim() !== "");
-    if (!hasPayer || value <= 0) {
-      setSuggestions([]);
-      if (form.payer_type !== "other") setCandidates([]);
-      return;
-    }
-    // "outro" sem paciente selecionado → sem sugestões
-    if (form.payer_type === "other" && form.payer_patient_id === "") {
+      (form.payer_type === "other" && form.payer_patient_id !== "");
+    // Limpa imediatamente para evitar mostrar candidates antigos enquanto
+    // o filtro novo está incompleto (ex: trocou de tipo / sem paciente).
+    if (!hasFilter || value <= 0) {
       setSuggestions([]);
       setCandidates([]);
       return;
