@@ -128,7 +128,8 @@ export default function ReceiptsPage() {
       if (form.payer_type !== "other") setCandidates([]);
       return;
     }
-    if (form.payer_type === "other") {
+    // "outro" sem paciente selecionado → sem sugestões
+    if (form.payer_type === "other" && form.payer_patient_id === "") {
       setSuggestions([]);
       setCandidates([]);
       return;
@@ -139,7 +140,10 @@ export default function ReceiptsPage() {
     if (form.payer_type === "health_plan" && form.payer_health_plan_id !== "") {
       params.set("payer_health_plan_id", String(form.payer_health_plan_id));
     }
-    if (form.payer_type === "patient" && form.payer_patient_id !== "") {
+    if (
+      (form.payer_type === "patient" || form.payer_type === "other") &&
+      form.payer_patient_id !== ""
+    ) {
       params.set("payer_patient_id", String(form.payer_patient_id));
     }
     setLoadingSuggestions(true);
@@ -230,7 +234,8 @@ export default function ReceiptsPage() {
           ? Number(form.payer_health_plan_id)
           : null,
       payer_patient_id:
-        form.payer_type === "patient" && form.payer_patient_id !== ""
+        (form.payer_type === "patient" || form.payer_type === "other") &&
+        form.payer_patient_id !== ""
           ? Number(form.payer_patient_id)
           : null,
       payer_name: form.payer_name.trim(),
@@ -407,6 +412,25 @@ export default function ReceiptsPage() {
               />
             )}
           </div>
+          {form.payer_type === "other" && (
+            <div className="md:col-span-6">
+              <Label>Paciente relacionado (opcional — para vincular notas)</Label>
+              <Select
+                value={form.payer_patient_id}
+                onChange={(e) => {
+                  const id = e.target.value === "" ? "" : Number(e.target.value);
+                  setForm((f) => ({ ...f, payer_patient_id: id }));
+                }}
+              >
+                <option value="">Nenhum paciente</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} · {p.health_plan_name ?? "—"}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div className="md:col-span-12">
             <Label>Observações</Label>
             <Input
@@ -417,7 +441,7 @@ export default function ReceiptsPage() {
           </div>
         </div>
 
-        {form.payer_type !== "other" && (
+        {(form.payer_type !== "other" || form.payer_patient_id !== "") && (
           <div className="mt-5 border-t border-slate-200 pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <div className="text-sm font-semibold text-slate-700">

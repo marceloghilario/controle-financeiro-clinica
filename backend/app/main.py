@@ -1282,6 +1282,8 @@ def _candidates_for_payer(
             query = query.where(models.Invoice.health_plan_name == plan_name)
     elif payer_type == "patient" and patient_id is not None:
         query = query.where(models.Invoice.patient_id == patient_id)
+    elif payer_type == "other" and patient_id is not None:
+        query = query.where(models.Invoice.patient_id == patient_id)
     rows = list(db.scalars(query.order_by(models.Invoice.issue_date.desc())))
     if include_invoice_ids:
         existing_ids = {i.id for i in rows}
@@ -1446,7 +1448,9 @@ def create_receipt(
             data.payer_health_plan_id if data.payer_type == "health_plan" else None
         ),
         payer_patient_id=(
-            data.payer_patient_id if data.payer_type == "patient" else None
+            data.payer_patient_id
+            if data.payer_type in ("patient", "other")
+            else None
         ),
         payer_name=payer_name,
         notes=(data.notes or None),
@@ -1498,7 +1502,7 @@ def update_receipt(
         obj.payer_health_plan_id = None
     else:
         obj.payer_health_plan_id = None
-        obj.payer_patient_id = None
+        # keep payer_patient_id for "other" type (optional patient reference)
 
     affected_invoice_ids: set[int] = set()
     if invoice_ids is not None:
