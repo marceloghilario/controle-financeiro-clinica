@@ -252,7 +252,7 @@ class HealthPlanMonthReport(BaseModel):
 
 
 class InvoiceBase(BaseModel):
-    number: str | None = None
+    number: str = Field(min_length=1)
     issue_date: date_type
     patient_id: int | None = None
     patient_name: str

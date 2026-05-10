@@ -282,13 +282,29 @@ export default function InvoicesPage() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    const numberTrimmed = form.number.trim();
+    if (!numberTrimmed) {
+      setError("Informe o número da nota.");
+      return;
+    }
     if (!form.patient_name.trim()) {
       setError("Informe o paciente.");
       return;
     }
+    const duplicate = items.find(
+      (inv) =>
+        inv.id !== editingId &&
+        (inv.number ?? "").trim().toLowerCase() === numberTrimmed.toLowerCase(),
+    );
+    if (duplicate) {
+      setError(
+        `Já existe uma nota com o número ${numberTrimmed} (${duplicate.patient_name}).`,
+      );
+      return;
+    }
     try {
       const payload = {
-        number: form.number.trim() || null,
+        number: numberTrimmed,
         issue_date: form.issue_date,
         patient_id: form.patient_id === "" ? null : Number(form.patient_id),
         patient_name: form.patient_name.trim(),
@@ -355,11 +371,12 @@ export default function InvoicesPage() {
             className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-2"
           >
             <div className="flex flex-col gap-1">
-              <Label>Número da nota</Label>
+              <Label>Número da nota *</Label>
               <Input
                 value={form.number}
                 onChange={(e) => setForm((f) => ({ ...f, number: e.target.value }))}
-                placeholder="Opcional"
+                placeholder="Obrigatório"
+                required
               />
             </div>
             <div className="flex flex-col gap-1">

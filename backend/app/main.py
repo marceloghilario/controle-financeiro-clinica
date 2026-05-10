@@ -1134,8 +1134,26 @@ def list_invoices(db: Session = Depends(get_db)) -> list[models.Invoice]:
 def create_invoice(
     data: schemas.InvoiceCreate, db: Session = Depends(get_db)
 ) -> models.Invoice:
+    number_clean = (data.number or "").strip()
+    if not number_clean:
+        raise HTTPException(
+            status_code=422, detail="Informe o número da nota fiscal."
+        )
+    existing = (
+        db.query(models.Invoice)
+        .filter(models.Invoice.number == number_clean)
+        .first()
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Já existe uma nota com o número {number_clean} "
+                f"({existing.patient_name})."
+            ),
+        )
     obj = models.Invoice(
-        number=(data.number or None),
+        number=number_clean,
         issue_date=data.issue_date,
         patient_id=data.patient_id,
         patient_name=data.patient_name.strip(),
