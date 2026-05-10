@@ -85,6 +85,11 @@ export default function ReceiptsPage() {
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<number>>(
     new Set(),
   );
+  // Cache de dados das notas selecionadas (preserva infos mesmo quando o
+  // filtro de candidates muda — ex: trocar paciente no plano).
+  const [selectedInvoicesData, setSelectedInvoicesData] = useState<
+    Record<number, ReceiptInvoiceSummary>
+  >({});
   const [suggestions, setSuggestions] = useState<InvoiceSubsetSuggestion[]>([]);
   const [candidates, setCandidates] = useState<ReceiptInvoiceSummary[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -193,22 +198,38 @@ export default function ReceiptsPage() {
   function resetForm() {
     setForm(emptyForm());
     setSelectedInvoiceIds(new Set());
+    setSelectedInvoicesData({});
     setSuggestions([]);
     setCandidates([]);
     setEditingId(null);
   }
 
-  function toggleInvoice(id: number) {
+  function toggleInvoice(inv: ReceiptInvoiceSummary) {
     setSelectedInvoiceIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(inv.id)) next.delete(inv.id);
+      else next.add(inv.id);
       return next;
+    });
+    setSelectedInvoicesData((prev) => {
+      if (prev[inv.id]) {
+        const { [inv.id]: _omit, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [inv.id]: inv };
     });
   }
 
   function applySuggestion(s: InvoiceSubsetSuggestion) {
     setSelectedInvoiceIds(new Set(s.invoice_ids));
+    setSelectedInvoicesData((prev) => {
+      const next: Record<number, ReceiptInvoiceSummary> = {};
+      for (const id of s.invoice_ids) {
+        const inv = candidates.find((c) => c.id === id) ?? prev[id];
+        if (inv) next[id] = inv;
+      }
+      return next;
+    });
   }
 
   async function startEdit(r: Receipt) {
@@ -225,6 +246,9 @@ export default function ReceiptsPage() {
       notes: r.notes ?? "",
     });
     setSelectedInvoiceIds(new Set(r.invoices.map((i) => i.id)));
+    setSelectedInvoicesData(
+      Object.fromEntries(r.invoices.map((i) => [i.id, i])),
+    );
     // garante que as notas vinculadas apareçam mesmo se já estão pagas
     const ids = r.invoices.map((i) => i.id);
     if (ids.length > 0) {
@@ -302,12 +326,21 @@ export default function ReceiptsPage() {
   }
 
   const targetValue = parseBRL(form.value);
+  // Notas a exibir na tabela: candidates do filtro atual + notas selecionadas
+  // que ficaram fora do filtro (ex: paciente diferente do filtro vigente).
+  const displayCandidates = useMemo(() => {
+    const seen = new Set(candidates.map((c) => c.id));
+    const extras = Object.values(selectedInvoicesData).filter(
+      (inv) => !seen.has(inv.id),
+    );
+    return [...extras, ...candidates];
+  }, [candidates, selectedInvoicesData]);
   const selectedSummary = useMemo(() => {
-    const list = candidates.filter((c) => selectedInvoiceIds.has(c.id));
+    const list = Object.values(selectedInvoicesData);
     const sumGross = list.reduce((s, i) => s + i.gross_value, 0);
     const sumNet = list.reduce((s, i) => s + i.net_value, 0);
     return { count: list.length, sumGross, sumNet };
-  }, [candidates, selectedInvoiceIds]);
+  }, [selectedInvoicesData]);
 
   const suggestedStatus = useMemo(
     () =>
@@ -554,7 +587,7 @@ export default function ReceiptsPage() {
               </div>
             )}
 
-            {candidates.length > 0 && (
+            {displayCandidates.length > 0 && (
               <div className="overflow-x-auto border border-slate-200 rounded-md">
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50 text-xs">
@@ -570,21 +603,34 @@ export default function ReceiptsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {candidates.map((c) => {
+                    {displayCandidates.map((c) => {
                       const checked = selectedInvoiceIds.has(c.id);
+                      const inCurrentFilter = candidates.some(
+                        (cc) => cc.id === c.id,
+                      );
+                      const outsideFilter = checked && !inCurrentFilter;
                       return (
                         <tr
                           key={c.id}
-                          onClick={() => toggleInvoice(c.id)}
+                          onClick={() => toggleInvoice(c)}
                           className={`cursor-pointer ${
-                            checked ? "bg-emerald-50" : "hover:bg-slate-50"
+                            checked
+                              ? outsideFilter
+                                ? "bg-amber-50"
+                                : "bg-emerald-50"
+                              : "hover:bg-slate-50"
                           }`}
+                          title={
+                            outsideFilter
+                              ? "Selecionada em outro filtro — continua incluída no recebimento"
+                              : undefined
+                          }
                         >
                           <td className="px-2 py-1 text-center">
                             <input
                               type="checkbox"
                               checked={checked}
-                              onChange={() => toggleInvoice(c.id)}
+                              onChange={() => toggleInvoice(c)}
                               onClick={(e) => e.stopPropagation()}
                             />
                           </td>
