@@ -1218,6 +1218,7 @@ def _invoice_summary(inv: models.Invoice) -> schemas.ReceiptInvoiceSummary:
         id=inv.id,
         number=inv.number,
         issue_date=inv.issue_date,
+        patient_id=inv.patient_id,
         patient_name=inv.patient_name,
         health_plan_name=inv.health_plan_name,
         reference_year=inv.reference_year,
@@ -1280,6 +1281,9 @@ def _candidates_for_payer(
         plan_name = plan.name if plan else None
         if plan_name:
             query = query.where(models.Invoice.health_plan_name == plan_name)
+        # filtro opcional adicional por paciente (facilita busca em planos grandes)
+        if patient_id is not None:
+            query = query.where(models.Invoice.patient_id == patient_id)
     elif payer_type == "patient" and patient_id is not None:
         query = query.where(models.Invoice.patient_id == patient_id)
     elif payer_type == "other" and patient_id is not None:

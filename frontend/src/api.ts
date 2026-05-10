@@ -251,6 +251,7 @@ export type ReceiptInvoiceSummary = {
   id: number;
   number: string | null;
   issue_date: string;
+  patient_id: number | null;
   patient_name: string;
   health_plan_name: string | null;
   reference_year: number;

@@ -330,6 +330,7 @@ class ReceiptInvoiceSummary(BaseModel):
     id: int
     number: str | None = None
     issue_date: date_type
+    patient_id: int | None = None
     patient_name: str
     health_plan_name: str | None = None
     reference_year: int

@@ -123,6 +123,14 @@ export default function ReceiptsPage() {
       (form.payer_type === "health_plan" && form.payer_health_plan_id !== "") ||
       (form.payer_type === "patient" && form.payer_patient_id !== "") ||
       (form.payer_type === "other" && form.payer_patient_id !== "");
+    const filterByPatientLocal =
+      form.payer_type === "health_plan" && form.payer_patient_id !== ""
+        ? Number(form.payer_patient_id)
+        : null;
+    const filterPatientNameLocal =
+      filterByPatientLocal !== null
+        ? (patients.find((p) => p.id === filterByPatientLocal)?.name ?? null)
+        : null;
     // Limpa imediatamente para evitar mostrar candidates antigos enquanto
     // o filtro novo está incompleto (ex: trocou de tipo / sem paciente).
     if (!hasFilter || value <= 0) {
@@ -142,18 +150,35 @@ export default function ReceiptsPage() {
     if (form.payer_type === "health_plan" && form.payer_health_plan_id !== "") {
       params.set("payer_health_plan_id", String(form.payer_health_plan_id));
     }
-    if (
-      (form.payer_type === "patient" || form.payer_type === "other") &&
-      form.payer_patient_id !== ""
-    ) {
+    if (form.payer_patient_id !== "") {
+      // envia paciente também no tipo "health_plan" (filtro server-side
+      // quando o backend novo estiver no ar; client-side caso contrario).
       params.set("payer_patient_id", String(form.payer_patient_id));
     }
     setLoadingSuggestions(true);
     api
       .get<InvoiceSuggestionsResponse>(`/api/receipts/suggestions?${params}`)
       .then((r) => {
-        setCandidates(r.candidates);
-        setSuggestions(r.suggestions);
+        // No tipo "convenio" + paciente selecionado, o backend antigo filtra
+        // por plano e ignora paciente; entao filtramos client-side aqui.
+        // Usa patient_id quando disponivel (backend novo) ou patient_name
+        // como fallback (backend atual ainda nao expoe patient_id no summary).
+        const filteredCandidates = filterByPatientLocal
+          ? r.candidates.filter((c) =>
+              c.patient_id != null
+                ? c.patient_id === filterByPatientLocal
+                : filterPatientNameLocal != null &&
+                  c.patient_name === filterPatientNameLocal,
+            )
+          : r.candidates;
+        const allowedIds = new Set(filteredCandidates.map((c) => c.id));
+        const filteredSuggestions = filterByPatientLocal
+          ? r.suggestions.filter((s) =>
+              s.invoice_ids.every((id) => allowedIds.has(id)),
+            )
+          : r.suggestions;
+        setCandidates(filteredCandidates);
+        setSuggestions(filteredSuggestions);
       })
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoadingSuggestions(false));
@@ -162,6 +187,7 @@ export default function ReceiptsPage() {
     form.payer_health_plan_id,
     form.payer_patient_id,
     form.value,
+    patients,
   ]);
 
   function resetForm() {
@@ -372,6 +398,7 @@ export default function ReceiptsPage() {
                     ...f,
                     payer_health_plan_id: id,
                     payer_name: plan?.name ?? "",
+                    payer_patient_id: "",
                   }));
                 }}
               >
@@ -433,6 +460,34 @@ export default function ReceiptsPage() {
               </Select>
             </div>
           )}
+          {form.payer_type === "health_plan" &&
+            form.payer_health_plan_id !== "" && (
+              <div className="md:col-span-6">
+                <Label>
+                  Filtrar por paciente do plano (opcional)
+                </Label>
+                <Select
+                  value={form.payer_patient_id}
+                  onChange={(e) => {
+                    const id =
+                      e.target.value === "" ? "" : Number(e.target.value);
+                    setForm((f) => ({ ...f, payer_patient_id: id }));
+                  }}
+                >
+                  <option value="">Todos os pacientes do plano</option>
+                  {patients
+                    .filter(
+                      (p) =>
+                        p.health_plan_id === form.payer_health_plan_id,
+                    )
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                </Select>
+              </div>
+            )}
           <div className="md:col-span-12">
             <Label>Observações</Label>
             <Input
