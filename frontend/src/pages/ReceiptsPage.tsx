@@ -50,6 +50,8 @@ type FormState = {
   linked_status: InvoiceStatus;
   status_overridden: boolean;
   notes: string;
+  // quando true, compara o valor pago com o BRUTO das notas; default = liquido
+  compare_by_gross: boolean;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -64,11 +66,12 @@ const emptyForm = (): FormState => ({
   linked_status: "paga",
   status_overridden: false,
   notes: "",
+  compare_by_gross: false,
 });
 
-function suggestStatus(value: number, sumNet: number): InvoiceStatus {
-  if (sumNet <= 0) return "paga";
-  const diff = value - sumNet;
+function suggestStatus(value: number, sumRef: number): InvoiceStatus {
+  if (sumRef <= 0) return "paga";
+  const diff = value - sumRef;
   if (Math.abs(diff) < 0.01) return "paga";
   if (diff < 0) return "paga_parcial";
   return "paga_excedente";
@@ -244,6 +247,7 @@ export default function ReceiptsPage() {
       linked_status: r.linked_status ?? "paga",
       status_overridden: true, // mantém o status escolhido anteriormente
       notes: r.notes ?? "",
+      compare_by_gross: false,
     });
     setSelectedInvoiceIds(new Set(r.invoices.map((i) => i.id)));
     setSelectedInvoicesData(
@@ -364,12 +368,15 @@ export default function ReceiptsPage() {
     return { count: list.length, sumGross, sumNet };
   }, [selectedInvoicesData]);
 
+  const compareSumRef = form.compare_by_gross
+    ? selectedSummary.sumGross
+    : selectedSummary.sumNet;
   const suggestedStatus = useMemo(
     () =>
       selectedSummary.count > 0
-        ? suggestStatus(targetValue, selectedSummary.sumNet)
+        ? suggestStatus(targetValue, compareSumRef)
         : "paga",
-    [targetValue, selectedSummary],
+    [targetValue, selectedSummary, compareSumRef],
   );
 
   // auto-aplica o status sugerido enquanto o usuário não tiver editado manualmente
@@ -421,6 +428,16 @@ export default function ReceiptsPage() {
               value={form.value}
               onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
             />
+            <label className="mt-1 flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={form.compare_by_gross}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, compare_by_gross: e.target.checked }))
+                }
+              />
+              Comparar pelo valor bruto da nota
+            </label>
           </div>
           <div className="md:col-span-2">
             <Label>Tipo de pagador</Label>
@@ -577,7 +594,14 @@ export default function ReceiptsPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {suggestions.map((s, idx) => {
-                    const exact = s.diff_net < 0.01 || s.diff_gross < 0.01;
+                    const refDiff = form.compare_by_gross
+                      ? s.diff_gross
+                      : s.diff_net;
+                    const refSum = form.compare_by_gross
+                      ? s.sum_gross
+                      : s.sum_net;
+                    const refLabel = form.compare_by_gross ? "bruto" : "líq";
+                    const exact = refDiff < 0.01;
                     return (
                       <button
                         key={idx}
@@ -590,16 +614,16 @@ export default function ReceiptsPage() {
                         }`}
                         title={`Líq: ${formatBRL(s.sum_net)} · Bruto: ${formatBRL(
                           s.sum_gross,
-                        )} · diff líq: ${formatBRL(s.diff_net)}`}
+                        )} · diff ${refLabel}: ${formatBRL(refDiff)}`}
                       >
                         <div className="font-medium">
                           {s.invoice_ids.length === 1
                             ? "1 nota"
                             : `${s.invoice_ids.length} notas`}{" "}
-                          · líq {formatBRL(s.sum_net)}
+                          · {refLabel} {formatBRL(refSum)}
                         </div>
                         <div className="text-[11px] text-slate-500">
-                          diferença líq {formatBRL(s.diff_net)}
+                          diferença {refLabel} {formatBRL(refDiff)}
                           {exact ? " · combinação exata" : ""}
                         </div>
                       </button>
@@ -698,15 +722,15 @@ export default function ReceiptsPage() {
                   Valor pago: <strong>{formatBRL(targetValue)}</strong>
                 </span>
                 <span>
-                  Diferença (vs. líq):{" "}
+                  Diferença (vs. {form.compare_by_gross ? "bruto" : "líq"}):{" "}
                   <strong
                     className={
-                      Math.abs(selectedSummary.sumNet - targetValue) < 0.01
+                      Math.abs(compareSumRef - targetValue) < 0.01
                         ? "text-emerald-700"
                         : "text-amber-700"
                     }
                   >
-                    {formatBRL(selectedSummary.sumNet - targetValue)}
+                    {formatBRL(compareSumRef - targetValue)}
                   </strong>
                 </span>
               </div>
@@ -755,10 +779,10 @@ export default function ReceiptsPage() {
                       )}
                   </span>
                   <span className="text-slate-500">
-                    {targetValue > 0 && selectedSummary.sumNet > 0
-                      ? `Pago ${formatBRL(targetValue)} vs. soma líq ${formatBRL(
-                          selectedSummary.sumNet,
-                        )}`
+                    {targetValue > 0 && compareSumRef > 0
+                      ? `Pago ${formatBRL(targetValue)} vs. soma ${
+                          form.compare_by_gross ? "bruto" : "líq"
+                        } ${formatBRL(compareSumRef)}`
                       : "Informe o valor e selecione pelo menos uma nota"}
                   </span>
                 </div>
