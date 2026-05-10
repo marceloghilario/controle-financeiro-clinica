@@ -135,7 +135,13 @@ export default function ReceiptsPage() {
       return;
     }
     const params = new URLSearchParams();
-    params.set("payer_type", form.payer_type);
+    // Para "outro" com paciente selecionado, consulta como se fosse "patient"
+    // (assim funciona com backend antigo que ainda nao trata "other" + paciente).
+    const queryPayerType =
+      form.payer_type === "other" && form.payer_patient_id !== ""
+        ? "patient"
+        : form.payer_type;
+    params.set("payer_type", queryPayerType);
     params.set("value", String(value));
     if (form.payer_type === "health_plan" && form.payer_health_plan_id !== "") {
       params.set("payer_health_plan_id", String(form.payer_health_plan_id));
