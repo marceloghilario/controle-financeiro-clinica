@@ -328,12 +328,18 @@ export default function ReceiptsPage() {
   const targetValue = parseBRL(form.value);
   // Notas a exibir na tabela: candidates do filtro atual + notas selecionadas
   // que ficaram fora do filtro (ex: paciente diferente do filtro vigente).
+  // Sempre ordenado por data de emissão decrescente (mais recentes primeiro).
   const displayCandidates = useMemo(() => {
     const seen = new Set(candidates.map((c) => c.id));
     const extras = Object.values(selectedInvoicesData).filter(
       (inv) => !seen.has(inv.id),
     );
-    return [...extras, ...candidates];
+    const merged = [...extras, ...candidates];
+    return merged.sort((a, b) => {
+      if (a.issue_date < b.issue_date) return 1;
+      if (a.issue_date > b.issue_date) return -1;
+      return b.id - a.id;
+    });
   }, [candidates, selectedInvoicesData]);
   const selectedSummary = useMemo(() => {
     const list = Object.values(selectedInvoicesData);
