@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -1556,4 +1559,19 @@ def delete_receipt(receipt_id: int, db: Session = Depends(get_db)) -> None:
 
 
     db.commit()
+
+
+# --------- Serve frontend static files (SPA) ---------
+
+_STATIC_DIR = Path(os.environ.get("STATIC_DIR", "")).resolve()
+if _STATIC_DIR.is_dir() and (_STATIC_DIR / "index.html").exists():
+    app.mount("/assets", StaticFiles(directory=_STATIC_DIR / "assets"), name="static-assets")
+
+    @app.get("/{full_path:path}")
+    def _spa_fallback(full_path: str):
+        """Serve index.html for any non-API route (SPA client-side routing)."""
+        file = _STATIC_DIR / full_path
+        if file.is_file():
+            return FileResponse(file)
+        return FileResponse(_STATIC_DIR / "index.html")
 
