@@ -108,6 +108,7 @@ export type AuthResponse = {
   token_type: string;
   user: AppUser | null;
   pending: boolean;
+  error: string | null;
 };
 
 export type AuthConfig = {

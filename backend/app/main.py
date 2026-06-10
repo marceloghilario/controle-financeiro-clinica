@@ -345,16 +345,15 @@ def auth_login(
         select(models.User).where(func.lower(models.User.email) == email_norm)
     )
     if not user:
-        raise HTTPException(status_code=401, detail="E-mail ou senha inválidos.")
+        return schemas.AuthResponse(error="E-mail ou senha inválidos.")
     if not user.password_hash:
-        raise HTTPException(
-            status_code=401,
-            detail="Esta conta não possui senha definida. Use 'Criar conta' com o mesmo e-mail para definir uma senha.",
+        return schemas.AuthResponse(
+            error="Esta conta não possui senha definida. Use 'Criar conta' com o mesmo e-mail para definir uma senha.",
         )
     if not verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="E-mail ou senha inválidos.")
+        return schemas.AuthResponse(error="E-mail ou senha inválidos.")
     if user.status == "revoked":
-        raise HTTPException(status_code=403, detail="Acesso revogado.")
+        return schemas.AuthResponse(error="Acesso revogado.")
     if user.status == "pending":
         return schemas.AuthResponse(pending=True, user=_user_to_read(user))
     return schemas.AuthResponse(

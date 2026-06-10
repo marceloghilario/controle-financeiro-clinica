@@ -81,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithPassword = async (email: string, password: string) => {
     const resp = await api.post<AuthResponse>("/api/auth/login", { email, password });
+    if (resp.error) throw new Error(resp.error);
     applyAuthResponse(resp);
   };
 

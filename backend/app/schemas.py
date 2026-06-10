@@ -54,6 +54,7 @@ class AuthResponse(BaseModel):
     token_type: str = "bearer"
     user: UserRead | None = None
     pending: bool = False
+    error: str | None = None
 
 
 InvoiceStatus = Literal[
