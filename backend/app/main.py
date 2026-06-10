@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -341,10 +344,16 @@ def auth_login(
     user = db.scalar(
         select(models.User).where(func.lower(models.User.email) == email_norm)
     )
-    if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="E-mail ou senha inválidos.")
+    if not user:
+        return schemas.AuthResponse(error="E-mail ou senha inválidos.")
+    if not user.password_hash:
+        return schemas.AuthResponse(
+            error="Esta conta não possui senha definida. Use 'Criar conta' com o mesmo e-mail para definir uma senha.",
+        )
+    if not verify_password(data.password, user.password_hash):
+        return schemas.AuthResponse(error="E-mail ou senha inválidos.")
     if user.status == "revoked":
-        raise HTTPException(status_code=403, detail="Acesso revogado.")
+        return schemas.AuthResponse(error="Acesso revogado.")
     if user.status == "pending":
         return schemas.AuthResponse(pending=True, user=_user_to_read(user))
     return schemas.AuthResponse(
@@ -1549,4 +1558,19 @@ def delete_receipt(receipt_id: int, db: Session = Depends(get_db)) -> None:
 
 
     db.commit()
+
+
+# --------- Serve frontend static files (SPA) ---------
+
+_STATIC_DIR = Path(os.environ.get("STATIC_DIR", "")).resolve()
+if _STATIC_DIR.is_dir() and (_STATIC_DIR / "index.html").exists():
+    app.mount("/assets", StaticFiles(directory=_STATIC_DIR / "assets"), name="static-assets")
+
+    @app.get("/{full_path:path}")
+    def _spa_fallback(full_path: str):
+        """Serve index.html for any non-API route (SPA client-side routing)."""
+        file = _STATIC_DIR / full_path
+        if file.is_file():
+            return FileResponse(file)
+        return FileResponse(_STATIC_DIR / "index.html")
 
