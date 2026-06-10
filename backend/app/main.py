@@ -341,7 +341,14 @@ def auth_login(
     user = db.scalar(
         select(models.User).where(func.lower(models.User.email) == email_norm)
     )
-    if not user or not verify_password(data.password, user.password_hash):
+    if not user:
+        raise HTTPException(status_code=401, detail="E-mail ou senha inválidos.")
+    if not user.password_hash:
+        raise HTTPException(
+            status_code=401,
+            detail="Esta conta não possui senha definida. Use 'Criar conta' com o mesmo e-mail para definir uma senha.",
+        )
+    if not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="E-mail ou senha inválidos.")
     if user.status == "revoked":
         raise HTTPException(status_code=403, detail="Acesso revogado.")

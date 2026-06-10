@@ -38,13 +38,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   };
   const token = getAuthToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch {
+    throw new Error(
+      "Não foi possível conectar ao servidor. Verifique sua conexão ou tente novamente mais tarde.",
+    );
+  }
   if (res.status === 401 || res.status === 403) {
-    // Token inválido/expirado/revogado: limpa e notifica
-    if (unauthorizedHandler) unauthorizedHandler();
+    // Só limpa sessão se já havia um token armazenado (evita disparar em login)
+    if (token && unauthorizedHandler) unauthorizedHandler();
   }
   if (!res.ok) {
     let message = `Erro ${res.status}`;
