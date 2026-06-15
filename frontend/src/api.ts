@@ -38,13 +38,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   };
   const token = getAuthToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch {
+    throw new Error(
+      "Não foi possível conectar ao servidor. Verifique sua conexão ou tente novamente mais tarde.",
+    );
+  }
   if (res.status === 401 || res.status === 403) {
-    // Token inválido/expirado/revogado: limpa e notifica
-    if (unauthorizedHandler) unauthorizedHandler();
+    // Só limpa sessão se já havia um token armazenado (evita disparar em login)
+    if (token && unauthorizedHandler) unauthorizedHandler();
   }
   if (!res.ok) {
     let message = `Erro ${res.status}`;
@@ -74,13 +81,12 @@ export const api = {
 export type UserRole = "admin" | "user";
 export type UserStatus = "pending" | "active" | "revoked";
 
-export type AppKey = "financial" | "patient";
+export type AppKey = "financial";
 
-export const APP_KEYS: AppKey[] = ["financial", "patient"];
+export const APP_KEYS: AppKey[] = ["financial"];
 
 export const APP_LABELS: Record<AppKey, string> = {
   financial: "Controle financeiro",
-  patient: "Cadastro de pacientes",
 };
 
 export type AppUser = {
@@ -101,6 +107,7 @@ export type AuthResponse = {
   token_type: string;
   user: AppUser | null;
   pending: boolean;
+  error: string | null;
 };
 
 export type AuthConfig = {

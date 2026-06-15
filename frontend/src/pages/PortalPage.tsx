@@ -3,10 +3,6 @@ import { type AppKey } from "../api";
 import { Card } from "../components/Card";
 import { useAuth } from "../auth";
 
-const PATIENT_APP_URL: string =
-  (import.meta.env.VITE_PATIENT_APP_URL as string | undefined) ||
-  "https://cadastro-paciente.devinapps.com";
-
 type AppCardData = {
   key: AppKey;
   title: string;
@@ -25,15 +21,7 @@ const ALL_APPS: AppCardData[] = [
     href: "/inicio",
     emoji: "📊",
   },
-  {
-    key: "patient",
-    title: "Cadastro de pacientes",
-    description:
-      "Cadastro clínico de pacientes, anamneses e dados de evolução.",
-    href: PATIENT_APP_URL,
-    external: true,
-    emoji: "🩺",
-  },
+
 ];
 
 export default function PortalPage() {
@@ -109,11 +97,7 @@ export default function PortalPage() {
           </div>
         )}
 
-        {user.apps.length > 0 && user.apps.length < 2 && (
-          <p className="text-center text-xs text-slate-500">
-            Precisa acessar outro aplicativo? Peça ao administrador.
-          </p>
-        )}
+
       </div>
     </div>
   );
