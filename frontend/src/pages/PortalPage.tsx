@@ -97,11 +97,7 @@ export default function PortalPage() {
           </div>
         )}
 
-        {user.apps.length > 0 && user.apps.length < 2 && (
-          <p className="text-center text-xs text-slate-500">
-            Precisa acessar outro aplicativo? Peça ao administrador.
-          </p>
-        )}
+
       </div>
     </div>
   );

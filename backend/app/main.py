@@ -1569,8 +1569,8 @@ if _STATIC_DIR.is_dir() and (_STATIC_DIR / "index.html").exists():
     @app.get("/{full_path:path}")
     def _spa_fallback(full_path: str):
         """Serve index.html for any non-API route (SPA client-side routing)."""
-        file = _STATIC_DIR / full_path
-        if file.is_file():
+        file = (_STATIC_DIR / full_path).resolve()
+        if file.is_file() and str(file).startswith(str(_STATIC_DIR)):
             return FileResponse(file)
         return FileResponse(_STATIC_DIR / "index.html")
 
