@@ -81,13 +81,12 @@ export const api = {
 export type UserRole = "admin" | "user";
 export type UserStatus = "pending" | "active" | "revoked";
 
-export type AppKey = "financial" | "patient";
+export type AppKey = "financial";
 
-export const APP_KEYS: AppKey[] = ["financial", "patient"];
+export const APP_KEYS: AppKey[] = ["financial"];
 
 export const APP_LABELS: Record<AppKey, string> = {
   financial: "Controle financeiro",
-  patient: "Cadastro de pacientes",
 };
 
 export type AppUser = {
