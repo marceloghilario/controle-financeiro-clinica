@@ -243,10 +243,8 @@ export default function InvoicesPage() {
     setShowForm(true);
   }
 
-  function startEdit(inv: Invoice) {
-    setEditingId(inv.id);
-    setShowForm(true);
-    setForm({
+  function invoiceToForm(inv: Invoice): FormState {
+    return {
       number: inv.number ?? "",
       issue_date: inv.issue_date.slice(0, 10),
       patient_id: inv.patient_id ?? "",
@@ -259,7 +257,19 @@ export default function InvoicesPage() {
       taxes: inv.taxes.toString().replace(".", ","),
       notes: inv.notes ?? "",
       status: inv.status,
-    });
+    };
+  }
+
+  function startEdit(inv: Invoice) {
+    setEditingId(inv.id);
+    setShowForm(true);
+    setForm(invoiceToForm(inv));
+  }
+
+  function startCopy(inv: Invoice) {
+    setEditingId(null);
+    setShowForm(true);
+    setForm({ ...invoiceToForm(inv), number: "" });
   }
 
   function onSelectPatient(value: string) {
@@ -775,6 +785,13 @@ export default function InvoicesPage() {
                           onClick={() => setViewInvoice(inv)}
                         >
                           Ver
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => startCopy(inv)}
+                        >
+                          Copiar
                         </Button>
                         <Button
                           type="button"
