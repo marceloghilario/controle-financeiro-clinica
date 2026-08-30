@@ -739,15 +739,36 @@ def _patient_read(p: models.Patient) -> schemas.PatientRead:
     )
 
 
-@app.get("/api/patients", response_model=list[schemas.PatientRead])
-def list_patients(db: Session = Depends(get_db)) -> list[schemas.PatientRead]:
-    rows = list(
-        db.scalars(
-            select(models.Patient)
-            .options(selectinload(models.Patient.health_plan))
-            .order_by(models.Patient.name)
-        )
+@app.get("/api/patients/insurances", response_model=list[str])
+def list_patient_insurances(db: Session = Depends(get_db)) -> list[str]:
+    """Convênios distintos entre os pacientes cadastrados."""
+    rows = db.scalars(
+        select(models.HealthPlan.name)
+        .join(models.Patient, models.Patient.health_plan_id == models.HealthPlan.id)
+        .distinct()
+        .order_by(models.HealthPlan.name)
     )
+    return [name for name in rows if name]
+
+
+@app.get("/api/patients", response_model=list[schemas.PatientRead])
+def list_patients(
+    nome: str | None = None,
+    convenio: str | None = None,
+    db: Session = Depends(get_db),
+) -> list[schemas.PatientRead]:
+    stmt = (
+        select(models.Patient)
+        .options(selectinload(models.Patient.health_plan))
+        .order_by(models.Patient.name)
+    )
+    if nome and nome.strip():
+        stmt = stmt.where(models.Patient.name.ilike(f"%{nome.strip()}%"))
+    if convenio and convenio.strip():
+        stmt = stmt.join(models.Patient.health_plan).where(
+            func.lower(models.HealthPlan.name) == convenio.strip().lower()
+        )
+    rows = list(db.scalars(stmt))
     return [_patient_read(p) for p in rows]
 
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, type HealthPlan, type Patient } from "../api";
 import { Button, Card, Input, Label, Select } from "../components/Card";
 import { formatCPF, isValidCPF, maskCPF, onlyDigits } from "../utils";
@@ -12,19 +12,50 @@ export default function PatientsPage() {
   const [planId, setPlanId] = useState<number | "">("");
   const [editing, setEditing] = useState<Patient | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filterName, setFilterName] = useState("");
+  const [filterInsurance, setFilterInsurance] = useState("");
+  const [insurances, setInsurances] = useState<string[]>([]);
 
-  async function load() {
-    const [p, pl] = await Promise.all([
-      api.get<Patient[]>("/api/patients"),
-      api.get<HealthPlan[]>("/api/health-plans"),
-    ]);
+  const hasActiveFilter = filterName.trim() !== "" || filterInsurance !== "";
+
+  const loadPatients = useCallback(async (nome: string, convenio: string) => {
+    const params = new URLSearchParams();
+    if (nome.trim()) params.set("nome", nome.trim());
+    if (convenio) params.set("convenio", convenio);
+    const qs = params.toString();
+    const p = await api.get<Patient[]>(`/api/patients${qs ? `?${qs}` : ""}`);
     setItems(p);
+  }, []);
+
+  const load = useCallback(async () => {
+    const [pl, ins] = await Promise.all([
+      api.get<HealthPlan[]>("/api/health-plans"),
+      api.get<string[]>("/api/patients/insurances"),
+    ]);
     setPlans(pl);
-  }
+    setInsurances(ins);
+    await loadPatients(filterName, filterInsurance);
+  }, [filterInsurance, filterName, loadPatients]);
 
   useEffect(() => {
-    load().catch((e) => setError(e.message));
+    api
+      .get<HealthPlan[]>("/api/health-plans")
+      .then(setPlans)
+      .catch((e) => setError(e.message));
+    api
+      .get<string[]>("/api/patients/insurances")
+      .then(setInsurances)
+      .catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      loadPatients(filterName, filterInsurance).catch((e) =>
+        setError((e as Error).message),
+      );
+    }, 300);
+    return () => clearTimeout(t);
+  }, [filterName, filterInsurance, loadPatients]);
 
   function resetForm() {
     setName("");
@@ -83,7 +114,11 @@ export default function PatientsPage() {
   return (
     <Card
       title="Pacientes"
-      subtitle="Cadastro de pacientes e vínculo com plano de saúde"
+      subtitle={
+        hasActiveFilter
+          ? `${items.length} paciente(s) no filtro atual`
+          : `${items.length} paciente(s) cadastrado(s)`
+      }
     >
       <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
         <div className="md:col-span-2 flex flex-col gap-1">
@@ -141,6 +176,30 @@ export default function PatientsPage() {
         </div>
       </form>
       {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+        <div className="md:col-span-2 flex flex-col gap-1">
+          <Label>Filtrar por nome</Label>
+          <Input
+            value={filterName}
+            onChange={(e) => setFilterName(e.target.value)}
+            placeholder="Digite parte do nome"
+          />
+        </div>
+        <div className="md:col-span-2 flex flex-col gap-1">
+          <Label>Filtrar por convênio</Label>
+          <Select
+            value={filterInsurance}
+            onChange={(e) => setFilterInsurance(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {insurances.map((i) => (
+              <option key={i} value={i}>
+                {i}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50">
@@ -172,7 +231,9 @@ export default function PatientsPage() {
             {items.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-3 py-4 text-center text-slate-500">
-                  Nenhum paciente cadastrado.
+                  {hasActiveFilter
+                    ? "Nenhum paciente encontrado para os filtros informados."
+                    : "Nenhum paciente cadastrado."}
                 </td>
               </tr>
             )}
