@@ -18,7 +18,7 @@ from .database import get_db
 SEED_ADMIN_EMAIL = "marceloghilario@gmail.com"
 
 # Apps disponíveis no portal — usados também pelo campo permissions.
-APP_KEYS = ("financial", "patient")
+APP_KEYS = ("financial",)
 
 
 def user_apps(role: str | None, permissions: list[str] | None) -> list[str]:
